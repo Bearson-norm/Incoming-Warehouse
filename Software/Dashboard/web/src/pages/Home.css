@@ -1,0 +1,152 @@
+.home h1 {
+  margin-bottom: 2rem;
+  color: #333;
+}
+
+.home-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.left-panel,
+.right-panel {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.left-panel h2,
+.right-panel h2 {
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.form-group select:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+button {
+  padding: 0.75rem 1.5rem;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.session-info {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #ecf0f1;
+  border-radius: 4px;
+}
+
+.session-info p {
+  margin: 0.5rem 0;
+  color: #333;
+}
+
+.weight-display {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.weight-value {
+  font-size: 4rem;
+  font-weight: bold;
+  color: #2c3e50;
+  margin-bottom: 1rem;
+}
+
+.weight-value .number {
+  display: inline-block;
+}
+
+.weight-value .unit {
+  font-size: 2rem;
+  margin-left: 0.5rem;
+  color: #7f8c8d;
+}
+
+.weight-value .no-data {
+  color: #bdc3c7;
+}
+
+.status {
+  font-size: 1.25rem;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.status.stable {
+  background: #2ecc71;
+  color: white;
+}
+
+.status.unstable {
+  background: #e74c3c;
+  color: white;
+}
+
+.start-btn {
+  width: 100%;
+  padding: 1rem;
+  background: #27ae60;
+  font-size: 1.25rem;
+}
+
+.start-btn:hover {
+  background: #229954;
+}
+
+.stop-btn {
+  width: 100%;
+  padding: 1rem;
+  background: #e74c3c;
+  font-size: 1.25rem;
+}
+
+.stop-btn:hover {
+  background: #c0392b;
+}
+
+.no-session {
+  text-align: center;
+  color: #7f8c8d;
+  padding: 2rem;
+}

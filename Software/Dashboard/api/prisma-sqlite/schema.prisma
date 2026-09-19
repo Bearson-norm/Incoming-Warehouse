@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("user") // 'admin', 'user'
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions WeighSession[]
+}
+
+model Vendor {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  packagings    Packaging[]
+  weighSessions WeighSession[]
+}
+
+model Packaging {
+  id         Int      @id @default(autoincrement())
+  vendorId   Int
+  name       String
+  tareWeight Float?
+  metadata   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  vendor        Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  weighSessions WeighSession[]
+}
+
+model RmCode {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  weighSessions WeighSession[]
+}
+
+model WeighSession {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  vendorId        Int?
+  packagingId     Int?
+  rmCodeId        Int?
+  /// Admin-defined cloud scale identifier selected before weighing
+  scaleId         Int?
+  scaleName       String?
+  /// Barcode LPN / package_uid untuk integrasi Odoo WMS
+  packageUid      String?
+  /// Scale gateway that produced the live weight for this session
+  gatewayId       String?
+  /// 'odoo' | 'internal'
+  weighingMethod  String    @default("odoo")
+  /// 'incoming' | 'intrans'
+  flowType        String    @default("incoming")
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  autosaveEnabled Boolean   @default(true)
+  weighingStarted Boolean   @default(false)
+  /// Snapshot field label (legacy cetak label)
+  labelMetadata   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user      User           @relation(fields: [userId], references: [id])
+  vendor    Vendor?        @relation(fields: [vendorId], references: [id])
+  packaging Packaging?     @relation(fields: [packagingId], references: [id])
+  rmCode    RmCode?        @relation(fields: [rmCodeId], references: [id], onDelete: SetNull)
+  readings  WeighReading[]
+
+  @@index([packageUid])
+  @@index([gatewayId])
+  @@index([scaleId])
+  @@index([userId, endedAt])
+  @@index([weighingMethod])
+  @@index([flowType])
+}
+
+model WeighReading {
+  id            Int       @id @default(autoincrement())
+  sessionId     Int
+  weight        Float
+  unit          String    @default("kg")
+  stable        Boolean
+  rawLine       String?
+  capturedAt    DateTime  @default(now())
+  savedAt       DateTime?
+  createdAt     DateTime  @default(now())
+  packageUid    String?
+  odooLogId     Int?
+  odooPackageId Int?
+  grossWeight   Float?
+  tareWeight    Float?
+  netWeight     Float?
+  weightStatus  String?
+  odooMessage   String?
+  odooError     String?
+  cloudSyncedAt DateTime?
+  cloudSyncError String?
+
+  session WeighSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([capturedAt])
+  @@index([packageUid])
+  @@index([cloudSyncedAt])
+}
+
+model Gateway {
+  id         Int       @id @default(autoincrement())
+  name       String
+  gatewayId  String    @unique
+  apiKey     String    @unique
+  lastSeenAt DateTime?
+  os         String?
+  version    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([gatewayId])
+}

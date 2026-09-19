@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: incoming-warehouse-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wis_foom}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-wis_foom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../Dashboard/api
+      dockerfile: Dockerfile
+    container_name: incoming-warehouse-api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wis_foom}?schema=public
+      PORT: 4123
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      GATEWAY_API_KEY: ${GATEWAY_API_KEY:?set GATEWAY_API_KEY in .env}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://wis.moof-set.web.id,http://wis.moof-set.web.id}
+      ODOO_BASE_URL: ${ODOO_BASE_URL:-}
+      ODOO_IOT_API_KEY: ${ODOO_IOT_API_KEY:-}
+      CLOUD_SYNC_API_KEY: ${CLOUD_SYNC_API_KEY:?set CLOUD_SYNC_API_KEY in .env}
+    ports:
+      - "4123:4123"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4123/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  web:
+    build:
+      context: ../Dashboard/web
+      dockerfile: Dockerfile
+    container_name: incoming-warehouse-web
+    ports:
+      - "4234:80"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: incoming-warehouse-nginx
+    volumes:
+      - ./nginx/wis.moof-set.web.id.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

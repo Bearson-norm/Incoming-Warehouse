@@ -1,0 +1,37 @@
+{
+  "name": "incoming-warehouse-software",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "Dashboard/api",
+    "Dashboard/web",
+    "Gateway/app",
+    "electron-app"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "build:api": "npm run build --workspace=Dashboard/api",
+    "build:web": "npm run build --workspace=Dashboard/web",
+    "build:gateway": "npm run build --workspace=Gateway/app",
+    "dev:api": "npm run start:dev --workspace=Dashboard/api",
+    "dev:web": "npm run dev --workspace=Dashboard/web",
+    "dev:gateway": "npm run dev --workspace=Gateway/app",
+    "start:server": "concurrently \"npm run dev:api\" \"npm run dev:web\" --names \"API,WEB\" --prefix-colors \"blue,green\"",
+    "start:gateway": "npm run dev:gateway",
+    "dev:electron": "concurrently -k -n WEB,ELN -c green,magenta \"npm run dev:web\" \"node electron-app/scripts/wait-and-start-electron.js\"",
+    "build:electron": "node electron-app/scripts/build-all.js",
+    "rebuild:electron": "node electron-app/scripts/rebuild-native.js",
+    "package:electron": "npm run build:electron && cd electron-app && npm run package",
+    "package:electron:win": "npm run build:electron && cd electron-app && npm run package:win",
+    "package:electron:mac": "npm run build:electron && cd electron-app && npm run package:mac",
+    "package:electron:linux": "npm run build:electron && cd electron-app && npm run package:linux",
+    "package:electron:win:dev": "npm run build:electron && cd electron-app && electron-builder --win --config.win.sign=null"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

@@ -1,0 +1,12 @@
+resources/data/*.db
+resources/data/*.db-*
+node_modules/
+dist/
+staging/
+# Bundled Node.js Windows runtime (created by npm run bundle-node before packaging)
+node-runtime/
+*.log
+.DS_Store
+*.swp
+*.swo
+*~

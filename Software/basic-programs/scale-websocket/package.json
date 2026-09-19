@@ -1,0 +1,18 @@
+{
+  "name": "scale-websocket-basic",
+  "version": "1.0.0",
+  "description": "Basic program untuk koneksi timbangan ke WebSocket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["scale", "websocket", "serial", "timbangan"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "serialport": "^12.0.0",
+    "@serialport/parser-readline": "^12.0.0",
+    "ws": "^8.18.0",
+    "express": "^4.18.2"
+  }
+}

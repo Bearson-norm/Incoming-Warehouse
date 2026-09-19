@@ -1,0 +1,15 @@
+{
+  "name": "zpl-printer-basic",
+  "version": "1.0.0",
+  "description": "Basic program untuk print label menggunakan ZPL (Zebra Programming Language)",
+  "main": "print.js",
+  "scripts": {
+    "test": "node print.js"
+  },
+  "keywords": ["zpl", "printer", "thermal", "label"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "serialport": "^12.0.0"
+  }
+}

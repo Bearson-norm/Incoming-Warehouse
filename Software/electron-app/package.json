@@ -1,0 +1,102 @@
+{
+  "name": "@incoming-warehouse/electron-app",
+  "version": "1.0.0",
+  "description": "Electron standalone application for Gateway and Dashboard",
+  "main": "dist/main/main.js",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc && electron .",
+    "start": "electron .",
+    "rebuild:native": "node scripts/rebuild-native.js",
+    "create-config": "node scripts/create-config.js",
+    "package": "electron-builder",
+    "package:win": "powershell -ExecutionPolicy Bypass -File scripts/package-win-no-sign.ps1",
+    "package:win:no-sign": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false WIN_CSC_LINK= electron-builder --win",
+    "package:mac": "electron-builder --mac",
+    "package:linux": "electron-builder --linux",
+    "bundle-node": "node scripts/bundle-node-runtime.js",
+    "prepare-pack-deps": "node scripts/prepare-pack-deps.js",
+    "stage-resources": "node scripts/stage-electron-resources.js"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "electron": "28.3.3",
+    "electron-builder": "24.13.3",
+    "typescript": "^5.3.3"
+  },
+  "build": {
+    "electronVersion": "28.3.3",
+    "appId": "com.incomingwarehouse.app",
+    "productName": "Incoming Warehouse",
+    "directories": {
+      "output": "../release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "dist/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "staging/api",
+        "to": "resources/api",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../Dashboard/web/dist",
+        "to": "resources/web",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "staging/gateway",
+        "to": "resources/gateway",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "resources/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "resources/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

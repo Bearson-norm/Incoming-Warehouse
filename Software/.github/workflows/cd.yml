@@ -1,0 +1,124 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Build and Push Docker Images
+        env:
+          DOCKER_BUILDKIT: 1
+        run: |
+          # Build API image
+          docker build -t incoming-warehouse-api:latest ./Dashboard/api
+          
+          # Build Web image
+          docker build -t incoming-warehouse-web:latest ./Dashboard/web
+          
+          # Save images as tar files
+          docker save incoming-warehouse-api:latest -o api-image.tar
+          docker save incoming-warehouse-web:latest -o web-image.tar
+
+      - name: Copy files to VPS
+        run: |
+          scp -r infra/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/incoming-warehouse/infra/
+          scp api-image.tar ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/incoming-warehouse/
+          scp web-image.tar ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/incoming-warehouse/
+
+      - name: Deploy on VPS
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            set -e
+            cd /opt/incoming-warehouse
+            
+            # Load images
+            docker load -i api-image.tar
+            docker load -i web-image.tar
+            
+            # Tag images with timestamp
+            CURRENT_TAG=$(date +%Y%m%d-%H%M%S)
+            docker tag incoming-warehouse-api:latest incoming-warehouse-api:$CURRENT_TAG
+            docker tag incoming-warehouse-web:latest incoming-warehouse-web:$CURRENT_TAG
+            
+            # Save current tag as backup
+            echo "$CURRENT_TAG" > last_good_tag.txt
+            
+            # Backup current docker-compose state
+            if [ -f infra/docker-compose.yml ]; then
+              cp infra/docker-compose.yml infra/docker-compose.yml.backup
+            fi
+            
+            # Stop existing containers
+            cd infra
+            docker-compose down || true
+            
+            # Start new containers
+            docker-compose up -d
+            
+            # Wait for services to start
+            echo "Waiting for services to start..."
+            sleep 10
+            
+            # Wait for health checks (max 60 seconds)
+            MAX_WAIT=60
+            ELAPSED=0
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              API_HEALTH=$(curl -sf http://localhost:4123/api/health > /dev/null 2>&1 && echo "OK" || echo "FAIL")
+              WEB_HEALTH=$(curl -sf http://localhost:4234 > /dev/null 2>&1 && echo "OK" || echo "FAIL")
+              
+              if [ "$API_HEALTH" = "OK" ] && [ "$WEB_HEALTH" = "OK" ]; then
+                echo "Health check passed!"
+                break
+              fi
+              
+              echo "Waiting for health checks... ($ELAPSED/$MAX_WAIT seconds)"
+              sleep 5
+              ELAPSED=$((ELAPSED + 5))
+            done
+            
+            # Final health check
+            API_HEALTH=$(curl -sf http://localhost:4123/api/health > /dev/null 2>&1 && echo "OK" || echo "FAIL")
+            WEB_HEALTH=$(curl -sf http://localhost:4234 > /dev/null 2>&1 && echo "OK" || echo "FAIL")
+            
+            if [ "$API_HEALTH" = "FAIL" ] || [ "$WEB_HEALTH" = "FAIL" ]; then
+              echo "Health check failed! Rolling back..."
+              
+              # Rollback: restore previous docker-compose and restart
+              if [ -f docker-compose.yml.backup ]; then
+                mv docker-compose.yml.backup docker-compose.yml
+              fi
+              
+              docker-compose down
+              docker-compose up -d
+              
+              echo "Rollback completed"
+              exit 1
+            else
+              echo "Deployment successful!"
+              # Cleanup old images (keep last 5 tags)
+              docker images | grep "incoming-warehouse" | tail -n +6 | awk '{print $3}' | xargs -r docker rmi || true
+            fi
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f api-image.tar web-image.tar

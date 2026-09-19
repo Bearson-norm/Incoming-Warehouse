@@ -1,0 +1,10 @@
+Disini merupakan tempat dimana data dari yang dikirim oleh gateway diterima berupa tampilan UI yang menampilkan angka hasil penimbangan dari yang dikirimkan oleh gateway. Secara garis besar adalah sistem dokumentasi hasil penimbangan dari barang-barang yang datang, dimana pada proses penimbangan diatur jenis kemasan pada produk yang akan ditimbang.
+
+Sistem ini dideploy menggunakan GitAction yang terdiri dari CI/CD dengan npm, sehingga buatkan script deployment jika CI berhasil maka CD baru berjalan, kemudian buatkan CD yang punya rollback jika deployment tidak berhasil. Adapun juga buatkan agar workflow tidak boros waktu dan redundan sehingga memakan waktu yang cukup banyak ketika deployment, lalu setupkan nginx dengan domain wis.moof-set.web.id dengan port proses di 4123 dan 4234 (jika butuh 2 port) dan untuk databasenya yaitu postgresql dengan nama database  wis_foom, username admin, dan password admin123 (sudah ada user dan passwordnya)
+
+Sekarang kita bahas sistemnnya apa saja yang disajikan, jadi terdapat halaman login diawal dimana diambil dari user yang ada didatabase dan sudah disetup. Lalu setelah masuk ke halaman login akan ditampilkan halaman utama yang layoutnya seperti ini; di pojok kiri ada navigation bar yang isinya adalah; home, database, setting, dan explore dengan fungsi sebagai berikut :
+
+1. home yang isinya ada left panel dan right panel, left panel ada pilihan vendor dan jenis packagingnya lalu klik simpan, lalu di right panel sudah disimpan  ada tombol mulai penimbangan yang hanya bisa diklik
+2. database yang isinya adalah data data vendor yang isinya ada ukuran2 kemasan di vendor itu
+3. setting yang isinya adalah pengaturan user, pengaturan autosave hasil penimbangan ketika angkanya stabil
+4. explore yang isinya adalah pencarian riwayat penimbangan yang sudah dilakukan

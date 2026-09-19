@@ -1,0 +1,19 @@
+{
+  "serial": {
+    "port": "COM3",
+    "baudRate": 9600,
+    "parity": "none",
+    "dataBits": 8,
+    "stopBits": 1,
+    "autoDetect": true
+  },
+  "server": {
+    "url": "http://localhost:4123",
+    "apiKey": "change-me-in-production-use-long-random-string"
+  },
+  "stable": {
+    "windowMs": 1000,
+    "pattern": "ST|STABLE|S",
+    "unstablePattern": "US|UNSTABLE|U"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "jwtSecret": "",
+  "gatewayApiKey": "",
+  "adminInitialPassword": "",
+  "gateway": {
+    "enabled": true,
+    "autoStart": false
+  },
+  "odoo": {
+    "baseUrl": "http://IP_ODOO_SERVER:8069",
+    "iotApiKey": "your-foom-iot-api-key"
+  },
+  "cloud": {
+    "serverUrl": "https://your-vps.example.com",
+    "syncApiKey": "your-cloud-sync-api-key",
+    "stationId": ""
+  }
+}
