@@ -1,6 +1,6 @@
 # Electron Standalone Setup Guide
 
-Panduan setup untuk menjalankan Gateway dan Dashboard sebagai aplikasi Electron standalone dengan koneksi database ke VPS.
+Panduan setup untuk menjalankan Gateway dan Dashboard sebagai aplikasi Electron standalone. Database operasional: **SQLite** di PC. Agregasi multi-stasiun: **VPS cloud** — [CLOUD_SETUP.md](CLOUD_SETUP.md).
 
 ## Quick Start
 
@@ -65,50 +65,24 @@ cd electron-app
 npm run dev
 ```
 
-## Konfigurasi Database VPS
+## Konfigurasi data & cloud VPS
 
-### Via UI (Recommended)
+Electron **tidak** menghubungkan PostgreSQL VPS langsung. SQLite disimpan di folder data aplikasi; sinkronisasi cloud lewat HTTP ke API VPS.
 
-1. Buka aplikasi Electron
-2. Navigate ke **Settings** page
-3. Scroll ke bagian **"Konfigurasi Database VPS"**
-4. Isi form:
-   - **Host**: Alamat VPS (contoh: `vps.example.com` atau IP)
-   - **Port**: Port PostgreSQL (default: `5432`)
-   - **Database**: Nama database (default: `wis_foom`)
-   - **Username**: Username database
-   - **Password**: Password database
-5. Klik **"Test Koneksi"** untuk validasi
-6. Klik **"Simpan Konfigurasi"** untuk menyimpan
+### Cloud (Settings → Cloud Server Configuration)
 
-API akan otomatis restart dengan konfigurasi baru.
+1. Buka **Settings**
+2. Isi **Cloud Server URL** (mis. `https://wis.moof-set.web.id`, tanpa `/` di akhir)
+3. Isi **Cloud Sync API Key** — sama dengan `CLOUD_SYNC_API_KEY` di VPS (`Software/infra/.env`)
+4. **Test** → **Simpan** → restart API otomatis
 
-### Via File Config
+Pairing lengkap (JWT admin, checklist): [CLOUD_SETUP.md](CLOUD_SETUP.md).
 
-Edit file: `~/.incoming-warehouse-electron/config.json`
+### File config
 
-```json
-{
-  "database": {
-    "host": "vps.example.com",
-    "port": 5432,
-    "database": "wis_foom",
-    "username": "admin",
-    "password": "your-password",
-    "url": "postgresql://admin:your-password@vps.example.com:5432/wis_foom"
-  },
-  "gateway": {
-    "enabled": true,
-    "autoStart": false
-  },
-  "odoo": {
-    "baseUrl": "http://IP_ODOO_SERVER:8069",
-    "iotApiKey": "your-foom-iot-api-key"
-  }
-}
-```
+`~/.incoming-warehouse-electron/config.json` atau `config.json` di folder portable. Contoh: [electron-app/config.example.json](electron-app/config.example.json).
 
-**Note**: Field `url` akan otomatis di-generate jika tidak ada. Bagian `odoo` juga bisa diatur lewat **Settings** di aplikasi.
+Odoo dapat diatur lewat Settings atau bagian `odoo` di JSON.
 
 ## Integrasi Odoo WMS (Recording Action)
 
@@ -181,7 +155,7 @@ Build Windows **portable** juga dikonfigurasi di `electron-app/package.json` (`w
 
 **Tidak,** jika Anda memaketkan lewat `npm run package:electron:win` (script memanggil `npm run bundle-node` dulu). Build ini mengunduh **Node.js Windows x64** resmi (versi mengikuti `node -v` pada mesin Anda, atau variabel `NODE_BUNDLE_WIN_VERSION`) dan menyertainya di folder **`resources`** aplikasi; `process-manager` memakai **`node.exe` itu**, bukan Node dari PATH.
 
-**Masih Anda perlukan di PC lain:** akses database (PostgreSQL/VPS), koneksi jaringan sesuai konfig — hanya binary Node yang tidak perlu diinstal lagi.
+**Masih Anda perlukan di PC lain:** akses jaringan ke VPS cloud (jika sync diaktifkan); SQLite lokal dibuat otomatis — Node.js tidak perlu diinstal.
 
 Gunakan struktur **`win-unpacked`** utuh untuk USB/copy folder; satu file **`…Portable.exe`** menyertakan konten yang sama secara praktis untuk pengguna akhir.
 
@@ -210,7 +184,7 @@ electron-app/
 ├── main/
 │   ├── main.ts              # Electron entry point
 │   ├── process-manager.ts   # Manajemen API & Gateway processes
-│   └── config-manager.ts    # Manajemen konfigurasi database
+│   └── config-manager.ts    # SQLite path, cloud, secrets
 ├── preload/
 │   └── preload.ts          # IPC bridge untuk security
 ├── scripts/
@@ -222,42 +196,17 @@ electron-app/
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│      Electron Main Process              │
-│                                         │
-│  ┌──────────────────────────────────┐ │
-│  │  BrowserWindow                    │ │
-│  │  (Dashboard Web UI)               │ │
-│  └──────────────────────────────────┘ │
-│                                         │
-│  ┌──────────────────────────────────┐ │
-│  │  Process Manager                  │ │
-│  │  ├─ API Process (child)          │ │
-│  │  │  └─ Port: 4123                │ │
-│  │  └─ Gateway Process (child)      │ │
-│  │     └─ Connect to localhost:4123 │ │
-│  └──────────────────────────────────┘ │
-│                                         │
-│  ┌──────────────────────────────────┐ │
-│  │  Config Manager                   │ │
-│  │  └─ Database Config (VPS)        │ │
-│  └──────────────────────────────────┘ │
-└─────────────────────────────────────────┘
-         │
-         │ DATABASE_URL
-         ▼
-┌─────────────────────────┐
-│  VPS PostgreSQL          │
-│  (Remote Database)       │
-└─────────────────────────┘
+Electron → API (SQLite, :4123) → Gateway (local)
+                │
+                └── HTTPS /api/cloud/* → VPS (Postgres + API)
 ```
 
 ## Fitur
 
 - ✅ **Standalone Application**: Semua komponen dalam satu aplikasi
-- ✅ **Database VPS**: Koneksi ke PostgreSQL di VPS (bukan local)
+- ✅ **SQLite lokal** + **sync cloud** ke VPS (opsional)
 - ✅ **Process Management**: Auto-restart jika crash
-- ✅ **UI Configuration**: Konfigurasi database via Settings page
+- ✅ **Settings**: Cloud, Odoo, Gateway
 - ✅ **Gateway Control**: Start/stop Gateway dari UI
 - ✅ **Status Monitoring**: Real-time status API dan Gateway
 
@@ -266,15 +215,14 @@ electron-app/
 ### API Server Tidak Start
 
 **Kemungkinan penyebab:**
-1. Database configuration belum di-set
-2. Port 4123 sudah digunakan
-3. Koneksi ke VPS gagal
+1. Port 4123 sudah digunakan (mis. `npm run dev:api` bersamaan dengan Electron)
+2. Build API belum ada (`npm run build:api`)
+3. Folder data / SQLite tidak writable
 
 **Solusi:**
-1. Check Settings page, pastikan database config sudah diisi
-2. Check apakah ada aplikasi lain di port 4123
-3. Test koneksi database dari Settings page
-4. Check log di DevTools (View > Toggle Developer Tools)
+1. Hentikan proses lain di port 4123
+2. `npm run build:api` dari root
+3. Check log di DevTools; lihat path SQLite di Settings
 
 ### Gateway Tidak Start
 

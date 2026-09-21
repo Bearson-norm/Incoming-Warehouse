@@ -1,6 +1,6 @@
 # Incoming Warehouse - Weighing System
 
-Sistem dokumentasi penimbangan incoming dengan komunikasi Gateway ↔ VPS.
+Sistem penimbangan incoming: **Gateway ↔ API lokal**; agregasi multi-stasiun opsional via **VPS cloud API** ([CLOUD_SETUP.md](CLOUD_SETUP.md)).
 
 ## Struktur Proyek
 
@@ -12,9 +12,8 @@ Sistem dokumentasi penimbangan incoming dengan komunikasi Gateway ↔ VPS.
 ## Database Requirements
 
 ### Dashboard/API
-- **PostgreSQL** (wajib)
-- Database: `wis_foom`
-- User: `admin` / Password: `admin123`
+- **Dev / VPS Docker**: PostgreSQL (`wis_foom`, user `admin`)
+- **Electron stasiun**: SQLite otomatis (lihat `electron-app/`)
 
 ### Gateway
 - **SQLite** (otomatis dibuat, tidak perlu setup)
@@ -77,12 +76,15 @@ cd Gateway/app && npm run dev
 
 ## Production Deployment
 
-Lihat dokumentasi di `infra/` untuk setup Docker Compose dan Nginx.
+- **VPS cloud (API-only)**: [CLOUD_SETUP.md](CLOUD_SETUP.md) + [infra/README.md](infra/README.md)
+- **Electron stasiun**: [electron-app/README.md](electron-app/README.md), [ELECTRON_SETUP.md](ELECTRON_SETUP.md)
 
 ## Dokumentasi
 
-- **[QUICK_START.md](QUICK_START.md)** - 🚀 Quick start dengan script gabungan
-- **[SETUP_LOCAL.md](SETUP_LOCAL.md)** - Panduan setup lokal lengkap
+- **[CLOUD_SETUP.md](CLOUD_SETUP.md)** - Pairing VPS ↔ Electron, deploy cloud
+- **[QUICK_START.md](QUICK_START.md)** - Quick start dev (script gabungan)
+- **[SETUP_LOCAL.md](SETUP_LOCAL.md)** - Setup lokal PostgreSQL + Vite
+- **[VPS_DATABASE_SETUP.md](VPS_DATABASE_SETUP.md)** - Backup/migrasi Postgres di VPS
 - **[IMPLEMENTATION.md](IMPLEMENTATION.md)** - Ringkasan implementasi
 - `Gateway/app/README.md` - Dokumentasi Gateway
 

@@ -1,6 +1,6 @@
 # Electron Standalone Application
 
-Aplikasi Electron yang menjalankan Gateway dan Dashboard secara standalone dengan koneksi database ke VPS.
+Aplikasi Electron yang menjalankan Gateway dan Dashboard secara standalone. Data operasional disimpan di **SQLite** di PC timbang; agregasi cloud opsional ke **VPS (PostgreSQL + API)** — lihat [CLOUD_SETUP.md](../CLOUD_SETUP.md).
 
 ## Struktur
 
@@ -22,7 +22,7 @@ electron-app/
 
 - ✅ Menjalankan Dashboard API sebagai child process
 - ✅ Menjalankan Gateway sebagai child process (opsional)
-- ✅ Konfigurasi database VPS via UI atau file config
+- ✅ SQLite lokal (otomatis) + konfigurasi cloud VPS (Settings → Cloud)
 - ✅ Auto-restart processes jika crash
 - ✅ Process status monitoring
 - ✅ Standalone packaging untuk Windows/Mac/Linux
@@ -103,73 +103,34 @@ cd electron-app
 
 Output akan berada di folder `release/`.
 
-## Konfigurasi Database
+## Data lokal & cloud VPS
 
-Anda dapat memilih antara **database lokal** (PostgreSQL di PC ini) atau **database VPS** (PostgreSQL di server). Hanya PostgreSQL diperlukan di VPS — API berjalan di perangkat ini.
+- **Database operasional**: SQLite di folder data aplikasi (portable: di samping exe; normal: `%USERPROFILE%\.incoming-warehouse-electron\`). Tidak perlu PostgreSQL di PC timbang.
+- **Cloud VPS**: Settings → **Cloud Server Configuration** — URL publik VPS + **Cloud Sync API Key** (sama dengan `CLOUD_SYNC_API_KEY` di `Software/infra/.env`). Panduan lengkap: [CLOUD_SETUP.md](../CLOUD_SETUP.md).
+- **Admin Cloud Server** (buat timbangan dari Electron): set `jwtSecret` di `config.json` sama dengan `JWT_SECRET` VPS (lihat CLOUD_SETUP).
 
-### Lokasi File Konfigurasi
+### Lokasi file konfigurasi
 
-Aplikasi mendukung **dua mode** konfigurasi:
+| Mode | Lokasi | Use case |
+|------|--------|----------|
+| **Portable** | `config.json` di folder exe + folder `data/` | USB / copy folder |
+| **User** | `%USERPROFILE%\.incoming-warehouse-electron\config.json` | Instal normal |
 
-| Mode | Lokasi Config | Use Case |
-|------|---------------|----------|
-| **Standalone/Portable** | `config.json` di folder yang sama dengan exe | USB drive, folder portabel, copy-paste ke PC lain |
-| **User** | `C:\Users\<username>\.incoming-warehouse-electron\config.json` | Installasi normal, satu user per PC |
+**Prioritas:** jika `config.json` ada di folder exe, dipakai mode portable.
 
-**Prioritas:** Jika `config.json` ada di folder exe, aplikasi akan menggunakannya (portable). Jika tidak, gunakan config di user home.
+Template: [config.example.json](config.example.json)
 
-**Standalone:** Copy **seluruh folder** `win-unpacked` ke USB/Downloads/folder mana saja. **PENTING:** Jangan hanya copy file exe — folder `resources/` harus ikut (berisi API, web, gateway). Struktur minimal:
-```
-MyFolder/
-├── Incoming Warehouse.exe
-├── config.json          (opsional, untuk portable config)
-└── resources/           ← WAJIB ada
-    ├── app.asar
-    └── resources/
-        ├── api/
-        ├── web/
-        └── gateway/
-```
+**Portable:** copy **seluruh folder** `win-unpacked`, jangan hanya exe — `resources/` wajib ada (API, web, gateway).
 
-### Via UI (Recommended)
+### Via UI
 
-1. Buka aplikasi Electron
-2. Jika muncul error "Database URL not configured", tutup dialog
-3. Di halaman Login, klik **"Configure Database"** (atau buka `#/setting` di URL)
-4. Pilih mode **Lokal** atau **VPS**, lalu isi form:
-   - **Lokal**: Host = localhost, Port = 5432
-   - **VPS**: Host = alamat VPS (contoh: `103.31.39.189`), Port = 5432 atau 5433
-   - Database: nama database (default: `wis_foom`)
-   - Username: username database
-   - Password: password database
-5. Klik "Test Koneksi" untuk memvalidasi
-6. Klik "Simpan Konfigurasi" — API akan restart otomatis
-7. Kembali ke Login dan login dengan admin/admin123
+1. Buka Electron → **Settings** (`#/setting`)
+2. **Cloud Server Configuration**: URL VPS + sync key → Test → Simpan
+3. Login admin → **Cloud Server** untuk timbangan (setelah JWT/sync key sesuai panduan cloud)
 
-Konfigurasi disimpan di: folder exe (portable) atau `~/.incoming-warehouse-electron/config.json` (user).
+### Via file
 
-### Via File Config
-
-Edit `config.json` di folder exe (portable) atau `~/.incoming-warehouse-electron/config.json` (user):
-
-```json
-{
-  "database": {
-    "host": "vps.example.com",
-    "port": 5432,
-    "database": "wis_foom",
-    "username": "admin",
-    "password": "your-password",
-    "url": "postgresql://admin:your-password@vps.example.com:5432/wis_foom"
-  },
-  "gateway": {
-    "enabled": true,
-    "autoStart": false
-  }
-}
-```
-
-Setelah mengubah file, restart aplikasi.
+Edit `config.json` (lihat `config.example.json`), restart aplikasi.
 
 ## Gateway Management
 
@@ -246,30 +207,19 @@ cd ../../electron-app && npm install
 ```
 ┌─────────────────────────────────────┐
 │     Electron Main Process           │
-│  ┌───────────────────────────────┐ │
-│  │  BrowserWindow (Dashboard UI) │ │
-│  └───────────────────────────────┘ │
-│  ┌───────────────────────────────┐ │
-│  │  Process Manager              │ │
-│  │  ├─ API Process (child)       │ │
-│  │  └─ Gateway Process (child)  │ │
-│  └───────────────────────────────┘ │
-│  ┌───────────────────────────────┐ │
-│  │  Config Manager               │ │
-│  │  └─ Database Config (VPS)     │ │
-│  └───────────────────────────────┘ │
-└─────────────────────────────────────┘
-         │
-         │ (DATABASE_URL)
-         ▼
-    ┌─────────────┐
-    │  VPS (PostgreSQL) │
-    └─────────────┘
+│  BrowserWindow (Dashboard UI)       │
+│  Process Manager                    │
+│    ├─ API (SQLite, :4123)           │
+│    └─ Gateway → local API           │
+│  Config: cloud URL + sync key       │
+└──────────────┬──────────────────────┘
+               │ HTTPS /api/cloud/*
+               ▼
+        VPS: nginx → API → PostgreSQL
 ```
 
 ## Notes
 
-- Database connection selalu ke VPS, bukan local
-- API berjalan di `localhost:4123`
-- Gateway connect ke local API, bukan langsung ke VPS
-- Config file location: `~/.incoming-warehouse-electron/config.json`
+- SQLite lokal untuk sesi/timbangan; VPS hanya untuk agregasi cloud (opsional)
+- API di `localhost:4123`; Gateway tidak langsung ke VPS
+- Config: portable folder atau `~/.incoming-warehouse-electron/config.json`

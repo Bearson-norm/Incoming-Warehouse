@@ -15,7 +15,7 @@ Tugas:
 Workflow CD (`cd.yml`) berjalan hanya pada push ke branch `main` atau manual trigger.
 
 Tugas:
-1. Build Docker images untuk API dan Web
+1. Build Docker image untuk API (VPS cloud; Web UI via Electron)
 2. Copy files ke VPS via SSH
 3. Deploy dengan docker-compose
 4. Health check

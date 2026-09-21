@@ -44,21 +44,6 @@ services:
       retries: 3
       start_period: 40s
 
-  web:
-    build:
-      context: ../Dashboard/web
-      dockerfile: Dockerfile
-    container_name: incoming-warehouse-web
-    ports:
-      - "4234:80"
-    depends_on:
-      - api
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   nginx:
     image: nginx:alpine
     container_name: incoming-warehouse-nginx
@@ -69,7 +54,6 @@ services:
       - "443:443"
     depends_on:
       - api
-      - web
     restart: unless-stopped
 
 volumes:

@@ -27,21 +27,13 @@ jobs:
         env:
           DOCKER_BUILDKIT: 1
         run: |
-          # Build API image
           docker build -t incoming-warehouse-api:latest ./Dashboard/api
-          
-          # Build Web image
-          docker build -t incoming-warehouse-web:latest ./Dashboard/web
-          
-          # Save images as tar files
           docker save incoming-warehouse-api:latest -o api-image.tar
-          docker save incoming-warehouse-web:latest -o web-image.tar
 
       - name: Copy files to VPS
         run: |
           scp -r infra/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/incoming-warehouse/infra/
           scp api-image.tar ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/incoming-warehouse/
-          scp web-image.tar ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/incoming-warehouse/
 
       - name: Deploy on VPS
         run: |
@@ -51,12 +43,9 @@ jobs:
             
             # Load images
             docker load -i api-image.tar
-            docker load -i web-image.tar
             
-            # Tag images with timestamp
             CURRENT_TAG=$(date +%Y%m%d-%H%M%S)
             docker tag incoming-warehouse-api:latest incoming-warehouse-api:$CURRENT_TAG
-            docker tag incoming-warehouse-web:latest incoming-warehouse-web:$CURRENT_TAG
             
             # Save current tag as backup
             echo "$CURRENT_TAG" > last_good_tag.txt
@@ -82,9 +71,8 @@ jobs:
             ELAPSED=0
             while [ $ELAPSED -lt $MAX_WAIT ]; do
               API_HEALTH=$(curl -sf http://localhost:4123/api/health > /dev/null 2>&1 && echo "OK" || echo "FAIL")
-              WEB_HEALTH=$(curl -sf http://localhost:4234 > /dev/null 2>&1 && echo "OK" || echo "FAIL")
               
-              if [ "$API_HEALTH" = "OK" ] && [ "$WEB_HEALTH" = "OK" ]; then
+              if [ "$API_HEALTH" = "OK" ]; then
                 echo "Health check passed!"
                 break
               fi
@@ -96,9 +84,8 @@ jobs:
             
             # Final health check
             API_HEALTH=$(curl -sf http://localhost:4123/api/health > /dev/null 2>&1 && echo "OK" || echo "FAIL")
-            WEB_HEALTH=$(curl -sf http://localhost:4234 > /dev/null 2>&1 && echo "OK" || echo "FAIL")
             
-            if [ "$API_HEALTH" = "FAIL" ] || [ "$WEB_HEALTH" = "FAIL" ]; then
+            if [ "$API_HEALTH" = "FAIL" ]; then
               echo "Health check failed! Rolling back..."
               
               # Rollback: restore previous docker-compose and restart
@@ -121,4 +108,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -f api-image.tar web-image.tar
+          rm -f api-image.tar

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild and start the VPS cloud stack (PostgreSQL + API + web + nginx).
+# Rebuild and start the VPS cloud stack (PostgreSQL + API + nginx). UI runs on Electron stations.
 # Run from the repo root or from Software/infra. Does not overwrite .env.
 
 set -euo pipefail
@@ -30,7 +30,7 @@ else
 fi
 
 echo "[deploy-cloud] Building and starting cloud services..."
-"${COMPOSE[@]}" up -d --build
+"${COMPOSE[@]}" up -d --build --remove-orphans
 
 echo "[deploy-cloud] Waiting for API health..."
 for _ in $(seq 1 40); do

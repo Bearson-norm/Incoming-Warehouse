@@ -12,7 +12,7 @@
   },
   "cloud": {
     "serverUrl": "https://your-vps.example.com",
-    "syncApiKey": "your-cloud-sync-api-key",
+    "syncApiKey": "same-value-as-CLOUD_SYNC_API_KEY-on-vps",
     "stationId": ""
   }
 }

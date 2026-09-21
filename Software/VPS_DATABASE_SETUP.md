@@ -1,8 +1,8 @@
 # VPS PostgreSQL Database Setup Guide
 
-This guide helps you set up PostgreSQL on your VPS with credentials **admin/admin123** and replicate your local database content.
+> **Arsitektur produksi saat ini:** stasiun timbang memakai **Electron + SQLite**; VPS menjalankan **PostgreSQL + API + nginx** untuk cloud sync. Electron **tidak** membuka koneksi PostgreSQL langsung ke VPS. Mulai dari [CLOUD_SETUP.md](CLOUD_SETUP.md) untuk deploy dan pairing URL/sync key.
 
-**Important:** You only need PostgreSQL on the VPS. The API runs on your local device (or Electron app) and connects to the VPS database remotely. No need to deploy or build the API on the VPS.
+Panduan ini untuk **administrasi PostgreSQL di VPS** (Docker Compose, backup/restore, migrasi) dan skenario dev yang menjalankan API di VPS dengan `DATABASE_URL=postgresql://...`.
 
 ---
 

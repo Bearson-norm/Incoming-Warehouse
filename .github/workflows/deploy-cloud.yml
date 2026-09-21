@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - "Software/Dashboard/api/**"
-      - "Software/Dashboard/web/**"
       - "Software/infra/**"
       - ".github/workflows/deploy-cloud.yml"
   workflow_dispatch:
@@ -53,10 +52,9 @@ jobs:
           SSH=(ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=yes)
           RSYNC=(rsync -az --delete --exclude node_modules --exclude dist --exclude .env -e "ssh -i ~/.ssh/deploy_key -p $SSH_PORT -o StrictHostKeyChecking=yes")
 
-          "${SSH[@]}" "$REMOTE" "mkdir -p '${DEPLOY_PATH}/Software/Dashboard/api' '${DEPLOY_PATH}/Software/Dashboard/web' '${DEPLOY_PATH}/Software/infra/scripts' '${DEPLOY_PATH}/Software/infra/nginx'"
+          "${SSH[@]}" "$REMOTE" "mkdir -p '${DEPLOY_PATH}/Software/Dashboard/api' '${DEPLOY_PATH}/Software/infra/scripts' '${DEPLOY_PATH}/Software/infra/nginx'"
 
           "${RSYNC[@]}" Software/Dashboard/api/ "$REMOTE:${DEPLOY_PATH}/Software/Dashboard/api/"
-          "${RSYNC[@]}" Software/Dashboard/web/ "$REMOTE:${DEPLOY_PATH}/Software/Dashboard/web/"
           "${RSYNC[@]}" Software/infra/ "$REMOTE:${DEPLOY_PATH}/Software/infra/"
 
       - name: Start cloud stack

@@ -50,12 +50,12 @@ Software/
 - ✅ Indikator stable/unstable
 
 ### 4. Infrastructure
-- ✅ Docker Compose setup
-- ✅ Nginx reverse proxy untuk domain `wis.moof-set.web.id`
+- ✅ Docker Compose setup (VPS cloud: `postgres` + `api` + `nginx`; UI via Electron)
+- ✅ Nginx reverse proxy untuk domain `wis.moof-set.web.id` (`/api`, `/socket.io`)
 - ✅ Port 4123 untuk API/WebSocket
-- ✅ Port 4234 untuk Web UI
+- ✅ Port 4234 untuk Web UI (dev/Electron lokal, bukan container VPS)
 - ✅ PostgreSQL database (`wis_foom`, user: `admin`, password: `admin123`)
-- ✅ Health checks untuk semua services
+- ✅ Health checks untuk services VPS
 
 ### 5. CI/CD (GitHub Actions)
 - ✅ CI workflow: Build dan lint semua packages
@@ -123,16 +123,14 @@ npm start
 
 ## Environment Variables
 
-### API (.env)
-- `DATABASE_URL` - PostgreSQL connection string
-- `PORT` - API port (default: 4123)
-- `JWT_SECRET` - Secret untuk JWT token
-- `GATEWAY_API_KEY` - API key untuk gateway authentication
-- `CORS_ORIGIN` - CORS origin untuk web
+### API
+- **VPS** (`infra/.env`): `DATABASE_URL` (Postgres), `JWT_SECRET`, `GATEWAY_API_KEY`, `CLOUD_SYNC_API_KEY`, `ADMIN_INITIAL_PASSWORD`
+- **Electron / SQLite**: `CLOUD_SERVER_URL`, `CLOUD_SYNC_API_KEY`, `STATION_ID` — lihat [CLOUD_SETUP.md](CLOUD_SETUP.md)
+- `PORT` (4123), `CORS_ORIGIN` (dev UI / Electron)
 
 ### Gateway (config.json atau env)
-- `SERVER_URL` - URL server VPS
-- `GATEWAY_API_KEY` - API key untuk autentikasi
+- `SERVER_URL` - URL **API lokal** (default `http://localhost:4123`)
+- `GATEWAY_API_KEY` - sama dengan API lokal
 - Serial port configuration
 
 ## GitHub Secrets (untuk CD)
