@@ -1,43 +1,40 @@
-FROM node:18-alpine AS builder
+FROM node:18-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Copy package files
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
 RUN npm ci
 
-# Copy source code
 COPY . .
 
-# Generate Prisma Client
 RUN npx prisma generate
 
-# Build application
 RUN npm run build
 
-# Production stage
-FROM node:18-alpine
+FROM node:18-bookworm-slim
 
 WORKDIR /app
 
-# Copy package files
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends wget openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install production dependencies only
-RUN npm ci --omit=dev && apk add --no-cache wget
+RUN npm ci --omit=dev
 
-# Copy built application, Prisma CLI, and generated client
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
-# Expose port
 EXPOSE 4123
 
-# Run migrations and start
 CMD ["sh", "-c", "npx prisma migrate deploy && npm run start:prod"]

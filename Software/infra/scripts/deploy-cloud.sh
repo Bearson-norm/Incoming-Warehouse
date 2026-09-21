@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild and start the VPS cloud stack (PostgreSQL + API + nginx). UI runs on Electron stations.
+# Rebuild and start VPS cloud stack: postgres + api (host nginx on :80 — see nginx/wis.moof-set.web.id.host.conf).
 # Run from the repo root or from Software/infra. Does not overwrite .env.
 
 set -euo pipefail

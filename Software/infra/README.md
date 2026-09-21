@@ -1,50 +1,56 @@
 # Infrastructure
 
-Docker Compose untuk **VPS cloud** (`postgres` + `api` + `nginx`, tanpa container web). Pairing dengan stasiun Electron: **[CLOUD_SETUP.md](../CLOUD_SETUP.md)**.
+Docker Compose untuk **VPS cloud**: `postgres` + `api` (default). **Nginx systemd di host** mem-proxy ke `127.0.0.1:4123`. Pairing Electron: **[CLOUD_SETUP.md](../CLOUD_SETUP.md)**.
 
 ## Setup
 
-1. Copy `.env.example` ke `.env`:
-```bash
-cp .env.example .env
-```
+1. Copy `.env.example` ke `.env` dan isi secret.
+2. Start stack (tanpa nginx container):
 
-2. Edit `.env` dan set secret keys:
-- `JWT_SECRET`: Secret untuk JWT token
-- `GATEWAY_API_KEY`: API key untuk gateway authentication
-- `POSTGRES_PASSWORD`, `CLOUD_SYNC_API_KEY`, dll.
-
-3. Start services:
 ```bash
 docker compose up -d --build
 ```
 
-4. Run database migrations (jika belum dijalankan otomatis saat API start):
+3. Konfigurasi **nginx host** (jika belum): lihat `nginx/wis.moof-set.web.id.host.conf`.
+
+4. Verifikasi:
+
 ```bash
-docker compose exec api npx prisma migrate deploy
-docker compose exec api npm run prisma:seed
+curl -s http://127.0.0.1:4123/api/health
+curl -s http://wis.moof-set.web.id/api/health   # via host nginx
 ```
+
+Migrasi dan seed admin awal dijalankan otomatis saat container `api` start.
 
 ## Services
 
-- **postgres**: PostgreSQL database (port 5432, bound to localhost on host)
-- **api**: NestJS API server (port 4123)
-- **nginx**: Reverse proxy (port 80/443)
+| Service | Default | Catatan |
+|---------|---------|---------|
+| **postgres** | Ya | Tanpa publish port ke host (hindari bentrok :5432) |
+| **api** | Ya | `127.0.0.1:4123` di host |
+| **nginx** (Docker) | Tidak | Profile `docker-nginx` — hanya VPS tanpa nginx host |
 
-## Nginx Configuration
+### Nginx di Docker (opsional)
 
-Nginx reverse proxy mengarahkan:
-- `/api` → API server (port 4123)
-- `/socket.io` → WebSocket server (port 4123)
-- `/` → JSON stub (cloud API-only; tidak ada web UI di VPS)
+Hanya jika **tidak** ada nginx/apache di port 80:
 
-## Domain
+```bash
+docker compose --profile docker-nginx up -d --build
+```
 
-Domain `wis.moof-set.web.id` dikonfigurasi di `nginx/wis.moof-set.web.id.conf`.
+Pakai `nginx/wis.moof-set.web.id.conf` (upstream `api:4123`).
 
-## SSL/HTTPS
+### Nginx di host (disarankan)
 
-Untuk mengaktifkan HTTPS, uncomment bagian SSL di file nginx config dan sediakan sertifikat SSL.
+1. Salin `nginx/wis.moof-set.web.id.host.conf` ke `/etc/nginx/sites-available/`.
+2. `sudo ln -s .../sites-enabled/`
+3. `sudo nginx -t && sudo systemctl reload nginx`
+
+Hapus container nginx lama jika pernah dibuat:
+
+```bash
+docker rm -f incoming-warehouse-nginx 2>/dev/null || true
+```
 
 ## Deploy script
 
@@ -52,4 +58,4 @@ Untuk mengaktifkan HTTPS, uncomment bagian SSL di file nginx config dan sediakan
 ./scripts/deploy-cloud.sh
 ```
 
-Menggunakan `docker compose up -d --build --remove-orphans` sehingga container lama (mis. `web`) ikut dihapus setelah upgrade compose.
+Menjalankan `docker compose up -d --build --remove-orphans` (postgres + api saja).
