@@ -112,7 +112,7 @@ Settings → **Cloud Server Configuration** → URL + sync key (sama dengan VPS)
 | `curl 127.0.0.1:4123` kosong | API container tidak jalan — perbaiki log API dulu; nginx tidak bisa proxy tanpa backend. |
 | Domain `/api/health` **404** nginx Ubuntu | (1) API belum up → 502/404 tergantung config. (2) **default site** menang: `sudo rm /etc/nginx/sites-enabled/default && sudo nginx -t && sudo systemctl reload nginx`. (3) Uji: `curl -s -H "Host: wis.moof-set.web.id" http://127.0.0.1/api/health`. |
 | `Bind for 0.0.0.0:80 failed` | Jangan start profile `docker-nginx`; pakai host nginx + `install-host-nginx.sh` |
-| API `Exited (1)`, Prisma/OpenSSL | Rebuild: `docker compose build --no-cache api && docker compose up -d api` |
+| `Cannot find module '/app/dist/main'` | Rebuild API image setelah fix `start:prod` → `node dist/src/main`; `docker compose build --no-cache api && docker compose up -d api` |
 
 Diagnosis cepat di VPS:
 

@@ -16,6 +16,7 @@ COPY . .
 RUN npx prisma generate
 
 RUN npm run build
+RUN test -f dist/src/main.js || test -f dist/main.js
 
 FROM node:18-bookworm-slim
 

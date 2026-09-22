@@ -38,7 +38,7 @@ function ensureApiBuild() {
   });
   apiMainFile = resolveApiMainFile();
   if (!apiMainFile) {
-    throw new Error('API build completed but dist/main.js was not created.');
+    throw new Error('API build completed but dist/src/main.js (or dist/main.js) was not created.');
   }
   return apiMainFile;
 }
