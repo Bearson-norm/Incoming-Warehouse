@@ -15,21 +15,40 @@ Lihat: [infra/README.md](infra/README.md), [electron-app/config.example.json](el
 
 ## Nginx di VPS (host vs Docker)
 
-| Situasi | Yang dijalankan |
-|---------|-----------------|
-| Sudah ada **nginx/apache** di `:80` (umum) | `docker compose up -d` + config host → [infra/nginx/wis.moof-set.web.id.host.conf](infra/nginx/wis.moof-set.web.id.host.conf) |
-| VPS kosong, belum ada web server | `docker compose --profile docker-nginx up -d` |
+| Situasi | File / langkah |
+|---------|----------------|
+| **ProductionDashboard** — nginx systemd sudah di `:80` | Pakai **`nginx/wis.moof-set.web.id.host.conf`**, bukan `wis.moof-set.web.id.conf` |
+| VPS tanpa web server | `docker compose --profile docker-nginx up -d` + `wis.moof-set.web.id.conf` |
 
-**Host nginx (disarankan):**
+**Penting:** Mengedit `infra/nginx/wis.moof-set.web.id.conf` dengan `nano` **belum** mengaktifkan nginx. File itu untuk container Docker (`server api:4123`). Nginx host harus proxy ke **`127.0.0.1:4123`**.
+
+**Aktifkan nginx host** (path contoh `/opt/Incoming-Warehouse/Software/infra`):
 
 ```bash
-sudo cp Software/infra/nginx/wis.moof-set.web.id.host.conf /etc/nginx/sites-available/wis.moof-set.web.id
+cd /opt/Incoming-Warehouse/Software/infra
+chmod +x scripts/install-host-nginx.sh
+sudo ./scripts/install-host-nginx.sh
+```
+
+Manual:
+
+```bash
+sudo cp nginx/wis.moof-set.web.id.host.conf /etc/nginx/sites-available/wis.moof-set.web.id
 sudo ln -sf /etc/nginx/sites-available/wis.moof-set.web.id /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 docker rm -f incoming-warehouse-nginx 2>/dev/null || true
 ```
 
-API harus listen di host: `curl -s http://127.0.0.1:4123/api/health`.
+Verifikasi:
+
+```bash
+curl -s http://127.0.0.1:4123/api/health
+curl -s http://wis.moof-set.web.id/api/health
+```
+
+**Electron Cloud Server URL:** `http://wis.moof-set.web.id` atau `https://wis.moof-set.web.id` (tanpa `/` di akhir, tanpa `/api`).
+
+Detail: [infra/nginx/README.md](infra/nginx/README.md).
 
 ## Pairing: VPS ↔ Electron
 

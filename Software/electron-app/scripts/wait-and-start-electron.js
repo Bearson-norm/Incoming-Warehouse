@@ -25,6 +25,47 @@ function resolveApiMainFile() {
   return candidates.find((p) => fs.existsSync(p));
 }
 
+function ensureApiBuild() {
+  let apiMainFile = resolveApiMainFile();
+  if (apiMainFile) {
+    return apiMainFile;
+  }
+
+  console.log('[Electron] API build belum ada; building once...');
+  execSync('npm run build', {
+    cwd: apiPath,
+    stdio: 'inherit',
+  });
+  apiMainFile = resolveApiMainFile();
+  if (!apiMainFile) {
+    throw new Error('API build completed but dist/main.js was not created.');
+  }
+  return apiMainFile;
+}
+
+function sqlitePrismaClientIsCurrent() {
+  const sourceSchema = path.join(apiPath, 'prisma-sqlite', 'schema.prisma');
+  const generatedCandidates = [
+    path.join(apiPath, 'node_modules', '.prisma', 'client', 'schema.prisma'),
+    path.join(rootPath, 'node_modules', '.prisma', 'client', 'schema.prisma'),
+  ];
+  const generatedSchema = generatedCandidates.find((candidate) =>
+    fs.existsSync(candidate)
+  );
+  if (!generatedSchema || !fs.existsSync(sourceSchema)) {
+    return false;
+  }
+
+  const generated = fs.readFileSync(generatedSchema, 'utf8');
+  const usesSqlite = /datasource\s+\w+\s*\{[\s\S]*?provider\s*=\s*"sqlite"/m.test(
+    generated
+  );
+  return (
+    usesSqlite &&
+    fs.statSync(generatedSchema).mtimeMs >= fs.statSync(sourceSchema).mtimeMs
+  );
+}
+
 const MAX_WAIT_MS = 120000;
 const POLL_MS = 400;
 
@@ -60,26 +101,26 @@ async function checkViteReady() {
 }
 
 async function main() {
-  const apiMainFile = resolveApiMainFile();
-  if (!apiMainFile) {
-    console.error(
-      '\n[Electron] API belum di-build. Electron menjalankan API dari file JS di dist/, bukan nest start --watch.\n' +
-        '   Jalankan sekali dari folder root:\n' +
-        '   npm run build:api\n' +
-        '   (dan jika perlu: cd Dashboard/api && npm run prisma:generate:sqlite)\n'
-    );
+  try {
+    ensureApiBuild();
+  } catch (error) {
+    console.error(`[Electron] API build failed: ${error.message}`);
     process.exit(1);
   }
 
-  try {
-    console.log('[Electron] Generating SQLite Prisma client for the local device...');
-    execSync('npm run prisma:generate:sqlite', {
-      cwd: apiPath,
-      stdio: 'inherit',
-    });
-  } catch (error) {
-    console.error('[Electron] prisma:generate:sqlite failed. SQLite API will not start.');
-    process.exit(1);
+  if (sqlitePrismaClientIsCurrent()) {
+    console.log('[Electron] SQLite Prisma client is current; skipping generation.');
+  } else {
+    try {
+      console.log('[Electron] Generating SQLite Prisma client for the local device...');
+      execSync('npm run prisma:generate:sqlite', {
+        cwd: apiPath,
+        stdio: 'inherit',
+      });
+    } catch (error) {
+      console.error('[Electron] prisma:generate:sqlite failed. SQLite API will not start.');
+      process.exit(1);
+    }
   }
 
   const start = Date.now();

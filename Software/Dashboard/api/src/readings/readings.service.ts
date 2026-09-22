@@ -23,6 +23,23 @@ const sessionInclude = {
 export class ReadingsService {
   constructor(private prisma: PrismaService) {}
 
+  private caseInsensitiveFilter(
+    operation: 'contains' | 'equals',
+    value: string,
+  ): {
+    contains?: string;
+    equals?: string;
+    mode?: 'insensitive';
+  } {
+    const filter = { [operation]: value };
+    if (!process.env.DATABASE_URL?.trim().startsWith('file:')) {
+      return { ...filter, mode: 'insensitive' };
+    }
+    // SQLite LIKE is case-insensitive for ASCII by default, while its Prisma
+    // connector does not accept `mode`. Exact matches are narrowed in memory.
+    return operation === 'equals' ? { contains: value } : filter;
+  }
+
   private scopedUserId(query: QueryReadingsDto, requester: Requester): number | undefined {
     if (requester.role === 'admin') {
       return query.userId;
@@ -88,8 +105,12 @@ export class ReadingsService {
       const term = packageUid.trim();
       and.push({
         OR: [
-          { packageUid: { contains: term, mode: 'insensitive' } },
-          { session: { packageUid: { contains: term, mode: 'insensitive' } } },
+          { packageUid: this.caseInsensitiveFilter('contains', term) },
+          {
+            session: {
+              packageUid: this.caseInsensitiveFilter('contains', term),
+            },
+          },
         ],
       });
     }
@@ -199,14 +220,18 @@ export class ReadingsService {
     const userFilter =
       requester.role === 'admin' ? {} : { userId: requester.userId };
 
-    const readings = await this.prisma.weighReading.findMany({
+    const candidateReadings = await this.prisma.weighReading.findMany({
       where: {
         savedAt: { not: null },
         AND: [
           {
             OR: [
-              { packageUid: { equals: lpn, mode: 'insensitive' } },
-              { session: { packageUid: { equals: lpn, mode: 'insensitive' } } },
+              { packageUid: this.caseInsensitiveFilter('equals', lpn) },
+              {
+                session: {
+                  packageUid: this.caseInsensitiveFilter('equals', lpn),
+                },
+              },
             ],
           },
           ...(Object.keys(userFilter).length ? [{ session: userFilter }] : []),
@@ -219,6 +244,12 @@ export class ReadingsService {
         capturedAt: 'asc',
       },
     });
+    const normalizedLpn = lpn.toLocaleLowerCase();
+    const readings = candidateReadings.filter(
+      (reading) =>
+        reading.packageUid?.toLocaleLowerCase() === normalizedLpn ||
+        reading.session.packageUid?.toLocaleLowerCase() === normalizedLpn,
+    );
 
     const incoming = readings.find((r) => r.session.flowType === 'incoming');
     const latest = readings[readings.length - 1];

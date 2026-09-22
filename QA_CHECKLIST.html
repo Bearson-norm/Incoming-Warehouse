@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Incoming Warehouse QA Checklist</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f2ed;
+      --surface: #fffdfa;
+      --surface-2: #eee7df;
+      --text: #2e211d;
+      --muted: #78665f;
+      --border: #d8cbc2;
+      --accent: #6d4c41;
+      --accent-2: #4e342e;
+      --success: #287a49;
+      --warning: #a35b00;
+      --danger: #b3261e;
+      --info: #28618b;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 Inter, Segoe UI, Arial, sans-serif;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(1500px, 100%); margin: 0 auto; padding: 28px; }
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+    h1 { margin: 0 0 6px; font-size: 27px; line-height: 1.2; }
+    h2 { margin: 0; font-size: 18px; }
+    p { margin: 0; }
+    .subtitle { color: var(--muted); max-width: 850px; }
+    .toolbar, .filters, .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .button {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 12px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .button:hover { border-color: var(--accent); }
+    .button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    .button.danger { color: var(--danger); }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .release-gate {
+      border-left: 5px solid var(--danger);
+      background: #fff7f6;
+    }
+    .release-gate strong { color: var(--danger); }
+    .nightmare summary {
+      cursor: pointer;
+      font-size: 17px;
+      font-weight: 750;
+      color: var(--danger);
+    }
+    .nightmare summary::marker { color: var(--danger); }
+    .nightmare-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .nightmare-item {
+      border: 1px solid #e8bbb7;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff9f8;
+    }
+    .nightmare-item strong { display: block; margin-bottom: 3px; }
+    .nightmare-item span { color: var(--muted); font-size: 12px; }
+    .summary { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); }
+    .stat {
+      padding: 13px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .stat-value { display: block; font-size: 23px; font-weight: 750; }
+    .stat-label { color: var(--muted); font-size: 12px; }
+    .progress-wrap {
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--surface-2);
+      margin-top: 12px;
+    }
+    #progress { width: 0; height: 100%; background: var(--success); transition: width .2s; }
+    .filters { margin-top: 14px; }
+    .filter-control {
+      min-height: 38px;
+      border: 1px solid var(--border);
+      background: white;
+      border-radius: 7px;
+      padding: 7px 10px;
+      color: var(--text);
+    }
+    #search { flex: 1 1 280px; }
+    .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 9px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1120px; }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      text-align: left;
+      background: var(--accent-2);
+      color: white;
+      font-size: 12px;
+      padding: 10px;
+    }
+    td { border-top: 1px solid var(--border); padding: 10px; vertical-align: top; }
+    tbody tr:hover { background: #faf5ef; }
+    tbody tr.done { background: #f0f8f3; }
+    tbody tr.failed { background: #fff1f0; }
+    .id { font: 700 12px Consolas, monospace; white-space: nowrap; }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      background: var(--surface-2);
+    }
+    .p0 { background: #ffe5e3; color: var(--danger); }
+    .p1 { background: #fff0d8; color: var(--warning); }
+    .p2 { background: #e8f0f7; color: var(--info); }
+    .status {
+      width: 108px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: white;
+    }
+    .notes { width: 190px; min-height: 58px; resize: vertical; border: 1px solid var(--border); border-radius: 6px; padding: 7px; }
+    .small { color: var(--muted); font-size: 12px; }
+    .empty { display: none; padding: 30px; text-align: center; color: var(--muted); }
+    footer { color: var(--muted); font-size: 12px; margin-top: 14px; }
+
+    @media (max-width: 800px) {
+      .shell { padding: 16px; }
+      header { flex-direction: column; }
+      .summary { grid-template-columns: repeat(2, 1fr); }
+      .nightmare-grid { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      body { background: white; }
+      .shell { width: 100%; padding: 0; }
+      .toolbar, .filters, .progress-wrap, footer { display: none !important; }
+      .panel { break-inside: avoid; }
+      .table-wrap { overflow: visible; border: 0; }
+      table { min-width: 0; font-size: 9px; }
+      th { position: static; background: #ddd; color: #111; }
+      th, td { padding: 5px; }
+      .notes { width: 100px; min-height: 38px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>Incoming Warehouse QA Checklist</h1>
+        <p class="subtitle">Regression checklist for LPN weighing, serial Gateway, authenticated dashboard, PostgreSQL, and Odoo WMS integration. Results and notes are saved in this browser.</p>
+      </div>
+      <div class="toolbar">
+        <button class="button" id="printBtn">Print</button>
+        <button class="button" id="exportBtn">Export JSON</button>
+        <button class="button danger" id="resetBtn">Reset results</button>
+      </div>
+    </header>
+
+    <section class="panel release-gate">
+      <strong>Release rule:</strong> all P0 cases must pass. Any failed P0 case blocks release. P1 failures require an accepted defect and workaround.
+    </section>
+
+    <details class="panel nightmare" open>
+      <summary>Worst outcomes to actively try to cause</summary>
+      <div class="nightmare-grid">
+        <div class="nightmare-item">
+          <strong>Correct weight attached to the wrong LPN</strong>
+          <span>Race two operators, two tabs, LPN replacement, delayed WebSocket frames, and Gateway switching. This is the highest operational risk because the number can look valid while belonging to another package.</span>
+        </div>
+        <div class="nightmare-item">
+          <strong>Odoo accepts weight but local history says nothing happened</strong>
+          <span>Kill PostgreSQL after Odoo replies, exhaust DB connections, or terminate the API during persistence. Recovery must expose the Odoo log ID and prevent a blind retry.</span>
+        </div>
+        <div class="nightmare-item">
+          <strong>One physical weigh becomes two receipts</strong>
+          <span>Double-click, retry after timeout, use two tabs, and restart the API mid-request. The same session must resolve to one confirmed outcome.</span>
+        </div>
+        <div class="nightmare-item">
+          <strong>Old or unstable scale data is accepted as current</strong>
+          <span>Disconnect the cable after a stable reading, change the load, reconnect after minutes, and replay buffered packets. Confirmation must require a fresh stable server snapshot.</span>
+        </div>
+        <div class="nightmare-item">
+          <strong>Scale unit error causes a 1,000× inventory error</strong>
+          <span>Send 1,234 g as kg, uppercase/lowercase units, unknown units, and values near rounding boundaries. Unknown units must fail closed.</span>
+        </div>
+        <div class="nightmare-item">
+          <strong>Warehouse keeps operating against the wrong environment</strong>
+          <span>Point Electron at staging Postgres or staging Odoo, rotate one key only, and use copied config files. The active targets must be visible and production secrets must not silently fall back.</span>
+        </div>
+        <div class="nightmare-item">
+          <strong>History and dashboard totals disagree during audit</strong>
+          <span>Use pagination, timezone boundaries, duplicate sessions, failed Odoo results, and imported SQLite rows. All reports must count the same confirmed business event.</span>
+        </div>
+        <div class="nightmare-item">
+          <strong>Unauthorized LAN user controls or observes the scale</strong>
+          <span>Attempt anonymous Socket.IO access, call port 4124 remotely, reuse expired tokens, and test weak/default keys. No live weight or serial configuration may leak.</span>
+        </div>
+      </div>
+    </details>
+
+    <section class="summary" aria-label="QA progress summary">
+      <div class="stat"><span class="stat-value" id="totalCount">0</span><span class="stat-label">Total cases</span></div>
+      <div class="stat"><span class="stat-value" id="passCount">0</span><span class="stat-label">Passed</span></div>
+      <div class="stat"><span class="stat-value" id="failCount">0</span><span class="stat-label">Failed</span></div>
+      <div class="stat"><span class="stat-value" id="blockedCount">0</span><span class="stat-label">Blocked</span></div>
+      <div class="stat"><span class="stat-value" id="remainingCount">0</span><span class="stat-label">Not tested</span></div>
+    </section>
+    <div class="progress-wrap" aria-label="Execution progress"><div id="progress"></div></div>
+
+    <section class="panel">
+      <h2>Filters</h2>
+      <div class="filters">
+        <input class="filter-control" id="search" type="search" placeholder="Search ID, title, steps, or expected result">
+        <select class="filter-control" id="moduleFilter">
+          <option value="all">All modules</option>
+        </select>
+        <select class="filter-control" id="priorityFilter">
+          <option value="all">All priorities</option>
+          <option value="P0">P0 — Release blocker</option>
+          <option value="P1">P1 — High</option>
+          <option value="P2">P2 — Normal</option>
+        </select>
+        <select class="filter-control" id="statusFilter">
+          <option value="all">All statuses</option>
+          <option value="not-tested">Not tested</option>
+          <option value="pass">Pass</option>
+          <option value="fail">Fail</option>
+          <option value="blocked">Blocked</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Priority</th>
+            <th>Module</th>
+            <th>Test case</th>
+            <th>Test steps</th>
+            <th>Expected result</th>
+            <th>Status</th>
+            <th>Evidence / notes</th>
+          </tr>
+        </thead>
+        <tbody id="checklistBody"></tbody>
+      </table>
+      <div class="empty" id="emptyState">No test cases match the current filters.</div>
+    </section>
+
+    <footer>Standalone file — no network connection or external library required.</footer>
+  </main>
+
+  <script>
+    const CASES = [
+      ["A-01","P0","Authentication","Valid login","Enter valid admin credentials and submit.","JWT is stored; user lands on Home; role and username display."],
+      ["A-02","P0","Authentication","Invalid login","Try wrong password, unknown user, and blank values.","Login is rejected without creating a token; clear error is shown."],
+      ["A-03","P0","Authentication","Protect private routes","Open /, /recording-action, and /record-documents while logged out.","Browser redirects to /login."],
+      ["A-04","P0","Authentication","Logout","Log in, then use Logout.","Token and auth storage clear; private routes are inaccessible."],
+      ["A-05","P1","Authentication","Expired JWT during weighing","Start a session, expire the token, then Start or Confirm.","401 clears auth and redirects correctly, including Electron HashRouter."],
+      ["A-06","P1","Authorization","Operator cannot change Odoo settings","Log in as role=user and PATCH /api/settings/odoo.","Request is denied; only admin may update Odoo configuration."],
+      ["A-07","P1","Authorization","Cross-user session access","As user B, query user A's session list and individual session.","Only own data is returned; direct foreign IDs return 404/403."],
+      ["A-08","P1","Authorization","Cross-user reading access","As user B, GET a reading belonging to user A.","Foreign reading is not disclosed."],
+
+      ["W-01","P0","Weighing","Odoo pass happy path","Scan valid LPN, wait for stable weight, Start, then Confirm.","One Odoo request; pass result shown; session ends; reading appears in history."],
+      ["W-02","P0","Weighing","Odoo fail status","Use an LPN/weight outside Odoo tolerance.","Warning result displays; reading stores fail status and gross/tare/net."],
+      ["W-03","P0","Weighing","Empty LPN","Try blank and whitespace-only LPN values.","UI and API reject the value."],
+      ["W-04","P1","Weighing","LPN format validation","Try Unicode, spaces, SQL-like text, and over 64 characters.","API rejects values outside [A-Za-z0-9/_-] or over 64 characters."],
+      ["W-05","P0","Weighing","Start requires recent stable scale","Try Start with no reading, unstable reading, and stale reading.","Start is rejected until a recent stable positive reading exists."],
+      ["W-06","P0","Weighing","Confirm requires Start","Create a session and call confirm before start-weighing.","API returns 400 and does not call Odoo."],
+      ["W-07","P0","Weighing","Confirm uses server scale snapshot","POST fabricated weight/stable/capturedAt values while scale shows another value.","Odoo receives the server's latest stable Gateway weight, not browser data."],
+      ["W-08","P0","Weighing","Zero or negative weight","Feed zero and negative scale readings, then attempt Start/Confirm.","The operation is rejected; Odoo is not called."],
+      ["W-09","P0","Weighing","Stale snapshot","Wait more than 8 seconds after the last stable reading, then Confirm.","API asks for a new live stable reading."],
+      ["W-10","P0","Weighing","Double confirm idempotency","Double-click Confirm or fire two requests concurrently.","Only one local result is finalized; repeated confirm returns the existing result."],
+      ["W-11","P1","Weighing","Confirm ended session","Confirm a completed session again.","Existing confirmed result is returned; no duplicate Odoo result is created."],
+      ["W-12","P1","Weighing","Reset before Start","Create a session and press Reset.","Session ends; LPN unlocks; form returns to initial state."],
+      ["W-13","P1","Weighing","Reload active session","Create/start a session and refresh the page.","LPN, lock state, and weighingStarted state restore."],
+      ["W-14","P1","Weighing","Two tabs same user","Open the same session in two tabs and confirm in one.","Second tab cannot create a duplicate result."],
+      ["W-15","P1","Weighing","Two operators one scale","Create sessions as two users while one Gateway streams.","No user's session ID or LPN is leaked into another user's live payload."],
+      ["W-16","P1","Weighing","Unit conversion display","Send readings in grams and kilograms.","UI displays kg correctly; Odoo receives correctly converted kg."],
+      ["W-17","P2","Weighing","Barcode scanner keyboard input","Scan a real LPN using the production HID scanner.","Complete LPN is captured without partial submission."],
+
+      ["O-01","P0","Odoo","Unknown LPN 404","Confirm a package absent from Odoo.","Error is shown; no local confirmed reading; session remains recoverable."],
+      ["O-02","P0","Odoo","Invalid IoT key 401","Configure an invalid Odoo IoT key and confirm.","Unauthorized error is shown; session is not ended."],
+      ["O-03","P0","Odoo","Duplicate weight 409","Confirm an LPN Odoo considers duplicated.","Conflict is shown without creating a false local success."],
+      ["O-04","P0","Odoo","Network timeout","Point Odoo URL at an unreachable service and confirm.","Request times out at about 30 seconds; no local confirmed result."],
+      ["O-05","P0","Odoo","Missing configuration","Clear Odoo URL/key and confirm.","Action fails with configuration guidance."],
+      ["O-06","P1","Odoo","Round gross weight","Test 1.239 kg and 1.234 kg.","Odoo receives 1.24 and 1.23 kg."],
+      ["O-07","P1","Odoo","Convert grams to kg","Send 1234 g from the Gateway.","Odoo receives 1.23 kg."],
+      ["O-08","P0","Odoo","Odoo success then DB outage","Make Odoo succeed, then force PostgreSQL persistence failure.","API retries; final error includes Odoo log_id and tells operator not to resubmit."],
+
+      ["G-01","P0","Gateway","Production scale parsing","Connect the installed scale and place a known calibrated mass.","Correct weight and stable/unstable state appear."],
+      ["G-02","P0","Gateway","Gateway authentication","Connect with valid and invalid GATEWAY_API_KEY values.","Valid Gateway registers; invalid one is disconnected."],
+      ["G-03","P0","Gateway","Serial reconnect","Unplug and reconnect the scale.","Gateway retries and resumes without app restart."],
+      ["G-04","P0","Gateway","API reconnect","Restart API while Gateway remains running.","Gateway reconnects and live readings resume."],
+      ["G-05","P1","Gateway","Latest-only offline buffer","Disconnect API, generate many readings, then reconnect.","Only the latest reading is replayed; UI is not flooded."],
+      ["G-06","P1","Gateway","Weight ACK","Send a valid weight:update.","Gateway receives persisted:true after server stores the snapshot."],
+      ["G-07","P1","Gateway","Malformed serial frames","Feed incomplete AND and Vibra frames.","Malformed values are ignored and never displayed."],
+      ["G-08","P1","Gateway","Config endpoint authentication","Call :4124/api/config without and with X-Gateway-Key.","Missing/wrong key returns 401; valid key succeeds."],
+      ["G-09","P1","Gateway","Config server network exposure","Connect to port 4124 from another host.","Connection is refused because service binds to 127.0.0.1."],
+      ["G-10","P2","Gateway","Serial defaults","Start without a config file.","Defaults are consistently 9600 baud, no parity, 8 data bits, 1 stop bit."],
+
+      ["S-01","P0","Security","Anonymous WebSocket","Connect Socket.IO without JWT and listen to weight:live.","Connection is rejected; no scale data is disclosed."],
+      ["S-02","P0","Security","Authenticated WebSocket","Connect with a valid user JWT.","Socket joins dashboard room and receives live weight."],
+      ["S-03","P0","Security","Production placeholder secrets","Start production API with missing/placeholder JWT and Gateway secrets.","API refuses to start with a clear configuration error."],
+      ["S-04","P1","Security","Password not exposed","Inspect login page, settings API, logs, and frontend bundle.","No default password or raw API key is displayed."],
+      ["S-05","P1","Security","Role-protected master data","As role=user, create/update/delete vendors and packaging.","Mutation is denied; read access behaves as intended."],
+      ["S-06","P2","Security","JWT remains invalid after expiry","Reuse an expired JWT over REST and Socket.IO.","Both transports reject it."],
+
+      ["H-01","P0","History","Confirmed record appears","Complete a successful weigh and open Record Documents.","LPN, date, status, gross, tare, and net are correct."],
+      ["H-02","P1","History","Server-side LPN search","Create more than 50 rows; search an LPN on a later page.","Correct row is found through the API, not only current-page filtering."],
+      ["H-03","P1","History","Pagination","Create 51+ readings and use next/previous controls.","Page and totalPages are correct; no records disappear."],
+      ["H-04","P1","History","Date boundaries","Filter around local midnight and daylight/timezone boundaries.","Only records within the selected local day appear."],
+      ["H-05","P1","History","Dashboard totals","Compare Home stats with confirmed session data.","Session count and total net weight match exactly."],
+      ["H-06","P1","History","Stats beyond 1000 records","Load more than 1000 confirmed rows in the selected period.","Stats remain exact because aggregation is server-side."],
+      ["H-07","P2","History","Empty state","Use a date/LPN with no matches.","A clear empty state appears without errors."],
+
+      ["C-01","P0","Configuration","PostgreSQL URL","Set a valid PostgreSQL URL in Electron Settings and test it.","Password is masked; connection test succeeds."],
+      ["C-02","P0","Configuration","Bad PostgreSQL URL","Try empty, file:, malformed, and unreachable URLs.","Invalid scheme is rejected and connection failures are explained."],
+      ["C-03","P1","Configuration","Odoo admin update","As admin, save URL and a new key; then save with empty key.","URL changes; empty key preserves existing key; raw key is never returned."],
+      ["C-04","P1","Configuration","Odoo settings while logged out","Open Electron Settings before login.","Database recovery controls are available; Odoo credential editor is hidden."],
+      ["C-05","P1","Configuration","Language selection","Switch Indonesian/English and visit all active pages.","Labels switch without breaking workflows."],
+
+      ["I-01","P0","Infrastructure","Docker PostgreSQL startup","Create infra .env with secrets and run docker compose up.","Postgres becomes healthy; migration runs; API and web health checks pass."],
+      ["I-02","P0","Infrastructure","Missing Docker secrets","Run compose without required secrets.","Compose fails immediately rather than using insecure defaults."],
+      ["I-03","P0","Infrastructure","API health","GET /api/health and GET /.","Health returns ok/timestamp; root lists service endpoints."],
+      ["I-04","P1","Infrastructure","Electron HashRouter","Navigate and refresh every packaged Electron route.","Routes remain available under file:// hash routing."],
+      ["I-05","P1","Infrastructure","PostgreSQL unavailable at startup","Start Electron/API while DB is down, then restore DB.","Useful error appears; restart succeeds after DB recovery."],
+      ["I-06","P1","Infrastructure","SQLite legacy import","Run prisma:import-sqlite against a backup into a clean Postgres DB.","Users, sessions, and readings import with valid relationships."],
+      ["I-07","P2","Infrastructure","Removed legacy routes","Open /database and verify Explore/PrintLabel are not in navigation.","Legacy route redirects; dead functionality is not presented as active."],
+
+      ["E-01","P0","Catastrophic Edge Cases","Wrong LPN after operator changes session","User A opens LPN-A and receives a stable weight. Before confirm, create LPN-B in another tab or API client, then confirm from the stale tab.","No weight is written to the wrong LPN. Stale session returns ended/conflict and identifies which active session replaced it."],
+      ["E-02","P0","Catastrophic Edge Cases","Two operators confirm one scale reading","Users A and B each Start different LPNs while sharing one Gateway. Both press Confirm within the same second.","System either explicitly supports and audits both confirmations, or allows only one. It must never silently associate either result with the other user's LPN."],
+      ["E-03","P0","Catastrophic Edge Cases","Gateway changes between Start and Confirm","Start using Gateway-1, disconnect it, then connect Gateway-2 with a fresh stable weight and press Confirm.","Session remains bound to Gateway-1 and fails as stale/unavailable; it must not silently consume Gateway-2's weight."],
+      ["E-04","P0","Catastrophic Edge Cases","Stable snapshot becomes physically false","Place 10 kg until stable, remove the item, immediately unplug the scale before an unstable frame arrives, wait over 8 seconds, then Confirm.","The old 10 kg snapshot expires and confirmation is rejected."],
+      ["E-05","P0","Catastrophic Edge Cases","Delayed packet with old capturedAt","Send a weight:update now whose capturedAt is 10 minutes old, but whose packet arrival time is current.","Freshness policy detects the stale measurement timestamp or documents why server receipt time is authoritative; stale physical readings cannot be accepted."],
+      ["E-06","P0","Catastrophic Edge Cases","Out-of-order scale frames","Send stable reading sequence numbers/timestamps in order 100, 102, then delayed 101 with a different weight.","Older frame cannot replace the latest accepted snapshot. Confirm uses the newest monotonic reading."],
+      ["E-07","P0","Catastrophic Edge Cases","Unknown unit fails closed","Send unit lb, oz, KG with whitespace, empty string, and arbitrary text.","Only explicitly supported g/kg variants are accepted. Unknown units cannot be treated as kilograms."],
+      ["E-08","P0","Catastrophic Edge Cases","NaN, Infinity, and extreme numeric payloads","Send JSON/numeric edge values, 1e309, extremely small positive values, and maximum safe floating values through Gateway/API.","Validation rejects non-finite, below-scale-resolution, and over-capacity values before Odoo."],
+      ["E-09","P0","Catastrophic Edge Cases","Scale decimal separator and sign corruption","Feed 1,234 vs 1.234, leading plus, negative, repeated decimal, and locale-formatted serial lines.","Parser returns the calibrated expected value or rejects the frame; it never converts 1.234 kg into 1,234 kg."],
+      ["E-10","P0","Catastrophic Edge Cases","Power loss after Odoo 200","Terminate the API process immediately after Odoo returns success but before the PostgreSQL transaction commits.","Restart exposes a recoverable record containing Odoo log_id, or produces a clear reconciliation alert. Operator is explicitly told not to resubmit."],
+      ["E-11","P0","Catastrophic Edge Cases","Power loss after DB commit before HTTP response","Allow PostgreSQL commit, then kill API before the browser receives 200. Retry confirm after restart.","Retry returns the existing confirmed result and does not send a second Odoo request."],
+      ["E-12","P0","Catastrophic Edge Cases","Odoo timeout but remote side committed","Make Odoo persist the weight but delay its response beyond 30 seconds. Operator retries.","System reconciles using an idempotency/business key or Odoo returns a recognizable duplicate. UI must not claim that nothing happened."],
+      ["E-13","P0","Catastrophic Edge Cases","Malformed Odoo success response","Return HTTP 200 with HTML, empty body, success:false, missing log_id, null weights, string numbers, or impossible net/tare values.","API rejects the response and does not store a false success. Error identifies invalid upstream contract."],
+      ["E-14","P0","Catastrophic Edge Cases","Odoo arithmetic inconsistency","Return gross 10 kg, tare 3 kg, net 9 kg, negative tare, or net greater than gross.","API flags or rejects inconsistent business values instead of presenting them as trusted history."],
+      ["E-15","P0","Catastrophic Edge Cases","PostgreSQL connection pool exhaustion","Hold all DB connections, then Start and Confirm while Odoo remains healthy.","Request fails before unsafe external mutation where possible; if Odoo already succeeded, log_id and reconciliation instructions survive."],
+      ["E-16","P0","Catastrophic Edge Cases","Database failover or read-only replica","Switch PostgreSQL to read-only/failover during session creation and during confirm persistence.","No partial local state is reported as success; retry behavior is bounded and visible."],
+      ["E-17","P0","Catastrophic Edge Cases","Migration interrupted halfway","Terminate API/container while migrate deploy runs, then restart it.","PostgreSQL migration state is recoverable; API never serves requests against a partially compatible schema."],
+      ["E-18","P0","Catastrophic Edge Cases","Two API instances process one confirm","Run two API replicas against one Postgres DB and send the same session confirm to both simultaneously.","Database-level coordination produces one business result. In-memory locks/snapshots alone must not permit duplicate Odoo calls."],
+      ["E-19","P0","Catastrophic Edge Cases","API restart loses live snapshot","Start weighing, restart only the API, leave scale/Gateway connected, then immediately Confirm before a new frame arrives.","Confirm is rejected until a new authenticated Gateway snapshot arrives; no browser-provided fallback is used."],
+      ["E-20","P1","Catastrophic Edge Cases","Clock jumps backward or forward","Change Gateway/PC clock by ±24 hours during an active session and around midnight.","Freshness and history filtering use a defined clock source; records remain auditably ordered and are not hidden in the wrong day."],
+      ["E-21","P1","Catastrophic Edge Cases","LPN visually deceptive characters","Try zero-width characters, homoglyphs, trailing newline, tab, CRLF, slash variants, and scanner control characters.","DTO rejects invisible/control/Unicode lookalike characters; displayed and submitted LPN are byte-for-byte predictable."],
+      ["E-22","P1","Catastrophic Edge Cases","Secrets rotated while clients stay connected","Rotate JWT_SECRET and GATEWAY_API_KEY while dashboards and Gateway are connected.","Old REST/Socket credentials stop working according to policy; Gateway reconnect failure is obvious and no fallback key is accepted."],
+      ["E-23","P1","Catastrophic Edge Cases","Disk full or log flood","Fill API/container disk and generate repeated serial/network errors.","Service fails visibly without corrupting PostgreSQL or entering an unbounded restart/log loop."],
+      ["E-24","P1","Catastrophic Edge Cases","Network flap during rapid weighing","Toggle LAN every 1–3 seconds while weights change and operator navigates between LPNs.","Only latest fresh reading is used; UI connection state is clear; no queued confirm executes against a later LPN."],
+      ["E-25","P1","Catastrophic Edge Cases","Browser resumes after machine sleep","Start weighing, sleep the workstation for 30 minutes, wake it, and press Confirm without touching the scale.","Stale UI state cannot confirm. A fresh server snapshot and valid JWT are required."],
+      ["E-26","P1","Catastrophic Edge Cases","Postgres points to wrong environment","Configure Electron with a valid staging database while Odoo points to production, and vice versa.","Environment mismatch is visible and deployment controls prevent accidental cross-environment operation."],
+      ["E-27","P1","Catastrophic Edge Cases","Legacy import rerun","Run the SQLite import twice and interrupt it midway once.","Importer is documented as one-shot or is idempotent; duplicates and broken foreign-key mappings are detected before production use."],
+      ["E-28","P1","Catastrophic Edge Cases","History altered after confirmation","Attempt API/database edits to gross, tare, net, LPN, Odoo IDs, capturedAt, or status after confirmation.","Audit-critical fields are immutable through normal APIs; administrative changes are logged if supported."],
+      ["E-29","P1","Catastrophic Edge Cases","More data than UI can safely render","Create very long valid LPNs, huge Odoo messages, and thousands of paginated records.","UI wraps/truncates safely, remains responsive, and does not render executable HTML."],
+      ["E-30","P1","Catastrophic Edge Cases","Stored XSS from upstream text","Return script tags/event handlers in Odoo message, LPN-like data, vendor, and packaging names.","React/HTML output remains escaped; no script executes in toast, history, dashboard, or exported checklist evidence."]
+    ].map(([id, priority, module, title, steps, expected]) => ({ id, priority, module, title, steps, expected }));
+
+    const STORAGE_KEY = "incoming-warehouse-qa-checklist-v1";
+    const state = loadState();
+    const body = document.getElementById("checklistBody");
+    const search = document.getElementById("search");
+    const moduleFilter = document.getElementById("moduleFilter");
+    const priorityFilter = document.getElementById("priorityFilter");
+    const statusFilter = document.getElementById("statusFilter");
+
+    function loadState() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+      catch { return {}; }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      updateSummary();
+    }
+
+    function resultFor(id) {
+      return state[id] || { status: "not-tested", notes: "" };
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function rowClass(status) {
+      if (status === "pass") return "done";
+      if (status === "fail") return "failed";
+      return "";
+    }
+
+    function render() {
+      const q = search.value.trim().toLowerCase();
+      const selectedModule = moduleFilter.value;
+      const selectedPriority = priorityFilter.value;
+      const selectedStatus = statusFilter.value;
+
+      const visible = CASES.filter(test => {
+        const result = resultFor(test.id);
+        const text = `${test.id} ${test.module} ${test.title} ${test.steps} ${test.expected}`.toLowerCase();
+        return (!q || text.includes(q))
+          && (selectedModule === "all" || test.module === selectedModule)
+          && (selectedPriority === "all" || test.priority === selectedPriority)
+          && (selectedStatus === "all" || result.status === selectedStatus);
+      });
+
+      body.innerHTML = visible.map(test => {
+        const result = resultFor(test.id);
+        return `
+          <tr class="${rowClass(result.status)}" data-id="${escapeHtml(test.id)}">
+            <td class="id">${escapeHtml(test.id)}</td>
+            <td><span class="tag ${test.priority.toLowerCase()}">${escapeHtml(test.priority)}</span></td>
+            <td><span class="tag">${escapeHtml(test.module)}</span></td>
+            <td><strong>${escapeHtml(test.title)}</strong></td>
+            <td>${escapeHtml(test.steps)}</td>
+            <td>${escapeHtml(test.expected)}</td>
+            <td>
+              <select class="status" aria-label="Status for ${escapeHtml(test.id)}">
+                <option value="not-tested" ${result.status === "not-tested" ? "selected" : ""}>Not tested</option>
+                <option value="pass" ${result.status === "pass" ? "selected" : ""}>Pass</option>
+                <option value="fail" ${result.status === "fail" ? "selected" : ""}>Fail</option>
+                <option value="blocked" ${result.status === "blocked" ? "selected" : ""}>Blocked</option>
+              </select>
+            </td>
+            <td><textarea class="notes" aria-label="Notes for ${escapeHtml(test.id)}" placeholder="Ticket, evidence, tester…">${escapeHtml(result.notes)}</textarea></td>
+          </tr>`;
+      }).join("");
+
+      document.getElementById("emptyState").style.display = visible.length ? "none" : "block";
+
+      body.querySelectorAll("tr").forEach(row => {
+        const id = row.dataset.id;
+        row.querySelector(".status").addEventListener("change", event => {
+          const current = resultFor(id);
+          state[id] = { ...current, status: event.target.value };
+          saveState();
+          render();
+        });
+        row.querySelector(".notes").addEventListener("input", event => {
+          const current = resultFor(id);
+          state[id] = { ...current, notes: event.target.value };
+          saveState();
+        });
+      });
+
+      updateSummary();
+    }
+
+    function updateSummary() {
+      const counts = { pass: 0, fail: 0, blocked: 0, "not-tested": 0 };
+      CASES.forEach(test => counts[resultFor(test.id).status]++);
+      const executed = CASES.length - counts["not-tested"];
+      document.getElementById("totalCount").textContent = CASES.length;
+      document.getElementById("passCount").textContent = counts.pass;
+      document.getElementById("failCount").textContent = counts.fail;
+      document.getElementById("blockedCount").textContent = counts.blocked;
+      document.getElementById("remainingCount").textContent = counts["not-tested"];
+      document.getElementById("progress").style.width = `${Math.round(executed / CASES.length * 100)}%`;
+    }
+
+    function exportResults() {
+      const output = {
+        system: "Incoming Warehouse",
+        exportedAt: new Date().toISOString(),
+        summary: {
+          total: CASES.length,
+          pass: CASES.filter(t => resultFor(t.id).status === "pass").length,
+          fail: CASES.filter(t => resultFor(t.id).status === "fail").length,
+          blocked: CASES.filter(t => resultFor(t.id).status === "blocked").length
+        },
+        results: CASES.map(test => ({ ...test, ...resultFor(test.id) }))
+      };
+      const blob = new Blob([JSON.stringify(output, null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `incoming-warehouse-qa-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    [...new Set(CASES.map(test => test.module))].sort().forEach(module => {
+      const option = document.createElement("option");
+      option.value = module;
+      option.textContent = module;
+      moduleFilter.appendChild(option);
+    });
+
+    [search, moduleFilter, priorityFilter, statusFilter].forEach(control => {
+      control.addEventListener(control === search ? "input" : "change", render);
+    });
+    document.getElementById("printBtn").addEventListener("click", () => window.print());
+    document.getElementById("exportBtn").addEventListener("click", exportResults);
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      if (!confirm("Reset every status and note? This cannot be undone.")) return;
+      Object.keys(state).forEach(key => delete state[key]);
+      localStorage.removeItem(STORAGE_KEY);
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
