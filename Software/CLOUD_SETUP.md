@@ -107,11 +107,40 @@ Settings → **Cloud Server Configuration** → URL + sync key (sama dengan VPS)
 
 | Gejala | Perbaikan |
 |--------|-----------|
-| `Bind for 0.0.0.0:80 failed` | Jangan start profile `docker-nginx`; pakai nginx host + `wis.moof-set.web.id.host.conf` |
-| `Bind for 5432 failed` | Compose tidak publish Postgres ke host; stop container lama atau postgres OS jika masih map manual |
-| API `Exited (1)`, Prisma/OpenSSL | Rebuild API image (Dockerfile memakai `node:18-bookworm-slim` + openssl) |
-| `curl 127.0.0.1:4123` gagal | `docker compose logs api --tail 80` |
-| 502 dari domain | Host nginx belum proxy ke `127.0.0.1:4123` atau API down |
+| `docker compose ps` hanya **postgres**, tidak ada **api** | `docker compose up -d api` lalu `docker compose logs api --tail 50`. Sering karena migrasi Prisma gagal — lihat baris bawah. |
+| Migrasi `User already exists` (P3018) | `migrate resolve --rolled-back` + `--applied` untuk `20260917120000_init_postgresql`, lalu `migrate deploy` (lihat chat/docs migrasi legacy). |
+| `curl 127.0.0.1:4123` kosong | API container tidak jalan — perbaiki log API dulu; nginx tidak bisa proxy tanpa backend. |
+| Domain `/api/health` **404** nginx Ubuntu | (1) API belum up → 502/404 tergantung config. (2) **default site** menang: `sudo rm /etc/nginx/sites-enabled/default && sudo nginx -t && sudo systemctl reload nginx`. (3) Uji: `curl -s -H "Host: wis.moof-set.web.id" http://127.0.0.1/api/health`. |
+| `Bind for 0.0.0.0:80 failed` | Jangan start profile `docker-nginx`; pakai host nginx + `install-host-nginx.sh` |
+| API `Exited (1)`, Prisma/OpenSSL | Rebuild: `docker compose build --no-cache api && docker compose up -d api` |
+
+Diagnosis cepat di VPS:
+
+```bash
+cd /opt/Incoming-Warehouse/Software/infra
+chmod +x scripts/verify-cloud-stack.sh
+./scripts/verify-cloud-stack.sh
+```
+
+Urutan perbaikan tipikal (ProductionDashboard):
+
+```bash
+cd /opt/Incoming-Warehouse/Software/infra
+
+# 1) Perbaiki migrasi jika API crash (DB lama)
+docker compose run --rm api npx prisma migrate resolve --rolled-back 20260917120000_init_postgresql
+docker compose run --rm api npx prisma migrate resolve --applied 20260917120000_init_postgresql
+docker compose run --rm api npx prisma migrate deploy
+
+# 2) Start API
+docker compose up -d api
+curl -s http://127.0.0.1:4123/api/health
+
+# 3) Nginx — hapus default jika /api/health 404
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+curl -s http://wis.moof-set.web.id/api/health
+```
 
 ## Dokumen terkait
 

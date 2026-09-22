@@ -22,12 +22,25 @@ echo "[install-host-nginx] Copying ${SOURCE} -> ${TARGET}"
 sudo cp "${SOURCE}" "${TARGET}"
 sudo ln -sf "${TARGET}" "/etc/nginx/sites-enabled/${SITE_NAME}"
 
+if [[ -L /etc/nginx/sites-enabled/default ]] || [[ -f /etc/nginx/sites-enabled/default ]]; then
+  echo "[install-host-nginx] Note: /etc/nginx/sites-enabled/default exists."
+  echo "  If ${SITE_NAME}/api/health returns 404, disable default:"
+  echo "  sudo rm /etc/nginx/sites-enabled/default && sudo nginx -t && sudo systemctl reload nginx"
+fi
+
 echo "[install-host-nginx] Testing nginx configuration..."
 sudo nginx -t
 
 echo "[install-host-nginx] Reloading nginx..."
 sudo systemctl reload nginx
 
-echo "[install-host-nginx] Done. Test:"
-echo "  curl -s http://127.0.0.1:4123/api/health"
-echo "  curl -s http://${SITE_NAME}/api/health"
+echo ""
+echo "[install-host-nginx] Nginx site installed. Next:"
+echo "  1. Start API:  cd ${INFRA_DIR} && docker compose up -d api"
+echo "  2. API health: curl -s http://127.0.0.1:4123/api/health"
+echo "  3. Via nginx:  curl -s -H \"Host: ${SITE_NAME}\" http://127.0.0.1/api/health"
+echo "  4. Public:     curl -s http://${SITE_NAME}/api/health"
+echo ""
+if ! curl -sf --max-time 2 http://127.0.0.1:4123/api/health >/dev/null 2>&1; then
+  echo "[install-host-nginx] WARNING: nothing responding on 127.0.0.1:4123 — start container incoming-warehouse-api first." >&2
+fi
