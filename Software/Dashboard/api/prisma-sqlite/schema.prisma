@@ -19,36 +19,55 @@ model User {
 }
 
 model Vendor {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
+  cloudId   String    @unique @default(cuid())
   name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  revision  Int       @default(1)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   packagings    Packaging[]
   weighSessions WeighSession[]
+
+  @@index([updatedAt])
+  @@index([deletedAt])
 }
 
 model Packaging {
-  id         Int      @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
+  cloudId    String    @unique @default(cuid())
   vendorId   Int
   name       String
   tareWeight Float?
   metadata   String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  revision   Int       @default(1)
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   vendor        Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   weighSessions WeighSession[]
+
+  @@index([vendorId, deletedAt])
+  @@index([updatedAt])
 }
 
 model RmCode {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique
+  id        Int       @id @default(autoincrement())
+  cloudId   String    @unique @default(cuid())
+  code      String    @unique
   name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  issuedAt  DateTime  @default(now())
+  revision  Int       @default(1)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   weighSessions WeighSession[]
+
+  @@index([updatedAt])
+  @@index([deletedAt])
 }
 
 model WeighSession {
@@ -92,25 +111,25 @@ model WeighSession {
 }
 
 model WeighReading {
-  id            Int       @id @default(autoincrement())
-  sessionId     Int
-  weight        Float
-  unit          String    @default("kg")
-  stable        Boolean
-  rawLine       String?
-  capturedAt    DateTime  @default(now())
-  savedAt       DateTime?
-  createdAt     DateTime  @default(now())
-  packageUid    String?
-  odooLogId     Int?
-  odooPackageId Int?
-  grossWeight   Float?
-  tareWeight    Float?
-  netWeight     Float?
-  weightStatus  String?
-  odooMessage   String?
-  odooError     String?
-  cloudSyncedAt DateTime?
+  id             Int       @id @default(autoincrement())
+  sessionId      Int
+  weight         Float
+  unit           String    @default("kg")
+  stable         Boolean
+  rawLine        String?
+  capturedAt     DateTime  @default(now())
+  savedAt        DateTime?
+  createdAt      DateTime  @default(now())
+  packageUid     String?
+  odooLogId      Int?
+  odooPackageId  Int?
+  grossWeight    Float?
+  tareWeight     Float?
+  netWeight      Float?
+  weightStatus   String?
+  odooMessage    String?
+  odooError      String?
+  cloudSyncedAt  DateTime?
   cloudSyncError String?
 
   session WeighSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -129,8 +148,33 @@ model Gateway {
   lastSeenAt DateTime?
   os         String?
   version    String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([gatewayId])
+}
+
+model MasterDataSyncState {
+  id           Int       @id @default(1)
+  cursor       String?
+  lastSyncedAt DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model LpnTraceOutbox {
+  id           Int       @id @default(autoincrement())
+  localEventId String    @unique
+  packageUid   String
+  eventType    String
+  payload      String?
+  sourceAt     DateTime
+  syncedAt     DateTime?
+  syncError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([syncedAt])
+  @@index([packageUid, sourceAt])
 }

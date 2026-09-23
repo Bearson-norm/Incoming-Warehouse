@@ -1,5 +1,29 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+export interface GatewayDeviceConfig {
+  serial: {
+    port: string;
+    baudRate: number;
+    parity: 'none' | 'even' | 'odd';
+    dataBits: 5 | 6 | 7 | 8;
+    stopBits: 1 | 1.5 | 2;
+    autoDetect: boolean;
+  };
+  stable: {
+    windowMs: number;
+    pattern: string;
+    unstablePattern: string;
+  };
+}
+
+export interface GatewaySerialPort {
+  path: string;
+  manufacturer?: string;
+  serialNumber?: string;
+  vendorId?: string;
+  productId?: string;
+}
+
 contextBridge.exposeInMainWorld('electron', {
   config: {
     getDatabase: () => ipcRenderer.invoke('config:get-database'),
@@ -18,6 +42,10 @@ contextBridge.exposeInMainWorld('electron', {
   gateway: {
     getConfig: () => ipcRenderer.invoke('config:get-gateway'),
     setConfig: (config: any) => ipcRenderer.invoke('config:set-gateway', config),
+    getDeviceConfig: () => ipcRenderer.invoke('gateway:get-device-config'),
+    listSerialPorts: () => ipcRenderer.invoke('gateway:list-serial-ports'),
+    setDeviceConfig: (config: GatewayDeviceConfig) =>
+      ipcRenderer.invoke('gateway:set-device-config', config),
   },
 
   process: {
@@ -62,6 +90,20 @@ declare global {
       gateway: {
         getConfig: () => Promise<any>;
         setConfig: (config: any) => Promise<{ success: boolean; error?: string }>;
+        getDeviceConfig: () => Promise<{
+          success: boolean;
+          config?: GatewayDeviceConfig;
+          error?: string;
+        }>;
+        listSerialPorts: () => Promise<{
+          success: boolean;
+          ports?: GatewaySerialPort[];
+          error?: string;
+        }>;
+        setDeviceConfig: (config: GatewayDeviceConfig) => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
       };
       process: {
         getStatus: () => Promise<any>;

@@ -21,36 +21,55 @@ model User {
 }
 
 model Vendor {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
+  cloudId   String    @unique @default(cuid())
   name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  revision  Int       @default(1)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   packagings    Packaging[]
   weighSessions WeighSession[]
+
+  @@index([updatedAt])
+  @@index([deletedAt])
 }
 
 model Packaging {
-  id         Int      @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
+  cloudId    String    @unique @default(cuid())
   vendorId   Int
   name       String
   tareWeight Float?
   metadata   String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  revision   Int       @default(1)
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   vendor        Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   weighSessions WeighSession[]
+
+  @@index([vendorId, deletedAt])
+  @@index([updatedAt])
 }
 
 model RmCode {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique
+  id        Int       @id @default(autoincrement())
+  cloudId   String    @unique @default(cuid())
+  code      String    @unique
   name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  issuedAt  DateTime  @default(now())
+  revision  Int       @default(1)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   weighSessions WeighSession[]
+
+  @@index([updatedAt])
+  @@index([deletedAt])
 }
 
 model WeighSession {
@@ -94,25 +113,25 @@ model WeighSession {
 }
 
 model WeighReading {
-  id            Int       @id @default(autoincrement())
-  sessionId     Int
-  weight        Float
-  unit          String    @default("kg")
-  stable        Boolean
-  rawLine       String?
-  capturedAt    DateTime  @default(now())
-  savedAt       DateTime?
-  createdAt     DateTime  @default(now())
-  packageUid    String?
-  odooLogId     Int?
-  odooPackageId Int?
-  grossWeight   Float?
-  tareWeight    Float?
-  netWeight     Float?
-  weightStatus  String?
-  odooMessage   String?
-  odooError     String?
-  cloudSyncedAt DateTime?
+  id             Int       @id @default(autoincrement())
+  sessionId      Int
+  weight         Float
+  unit           String    @default("kg")
+  stable         Boolean
+  rawLine        String?
+  capturedAt     DateTime  @default(now())
+  savedAt        DateTime?
+  createdAt      DateTime  @default(now())
+  packageUid     String?
+  odooLogId      Int?
+  odooPackageId  Int?
+  grossWeight    Float?
+  tareWeight     Float?
+  netWeight      Float?
+  weightStatus   String?
+  odooMessage    String?
+  odooError      String?
+  cloudSyncedAt  DateTime?
   cloudSyncError String?
 
   session WeighSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -136,25 +155,38 @@ model CloudScale {
 }
 
 model CloudWeighReading {
-  id             Int      @id @default(autoincrement())
-  scaleId        Int
-  scaleName      String
-  username       String
-  stationId      String?
-  localReadingId Int?
-  packageUid     String?
-  flowType       String
-  weighingMethod String
-  weight         Float
-  grossWeight    Float?
-  tareWeight     Float?
-  netWeight      Float?
-  unit           String   @default("kg")
-  weightStatus   String?
-  capturedAt     DateTime
-  syncedAt       DateTime @default(now())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  eventId           String?  @unique
+  scaleId           Int
+  scaleName         String
+  username          String
+  stationId         String?
+  deviceId          String?
+  gatewayId         String?
+  localReadingId    Int?
+  localSessionId    Int?
+  packageUid        String?
+  vendorCloudId     String?
+  vendorSnapshot    String?
+  packagingCloudId  String?
+  packagingSnapshot String?
+  rmCodeCloudId     String?
+  rmCodeSnapshot    String?
+  labelMetadata     String?
+  odooLogId         Int?
+  odooPackageId     Int?
+  flowType          String
+  weighingMethod    String
+  weight            Float
+  grossWeight       Float?
+  tareWeight        Float?
+  netWeight         Float?
+  unit              String   @default("kg")
+  weightStatus      String?
+  capturedAt        DateTime
+  syncedAt          DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   scale CloudScale @relation(fields: [scaleId], references: [id])
 
@@ -163,6 +195,54 @@ model CloudWeighReading {
   @@index([scaleId])
   @@index([capturedAt])
   @@index([stationId])
+  @@index([packageUid, capturedAt])
+  @@index([vendorCloudId])
+  @@index([rmCodeCloudId])
+}
+
+model MasterDataAuditEvent {
+  id            String   @id @default(cuid())
+  entityType    String
+  entityCloudId String
+  action        String
+  revision      Int
+  beforeJson    Json?
+  afterJson     Json?
+  reason        String
+  actorUserId   Int?
+  actorUsername String
+  stationId     String?
+  deviceId      String?
+  requestId     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([entityType, entityCloudId, revision])
+  @@index([createdAt])
+  @@index([actorUsername])
+}
+
+model LpnTraceEvent {
+  id           String   @id @default(cuid())
+  stationId    String
+  localEventId String
+  packageUid   String
+  eventType    String
+  username     String
+  deviceId     String?
+  gatewayId    String?
+  scaleId      Int?
+  scaleName    String?
+  sourceAt     DateTime
+  receivedAt   DateTime @default(now())
+  payload      Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([stationId, localEventId])
+  @@index([packageUid, sourceAt])
+  @@index([stationId, sourceAt])
+  @@index([eventType])
 }
 
 model Gateway {

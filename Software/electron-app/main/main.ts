@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, IpcMainInvokeEvent } from 'electro
 import * as path from 'path';
 import * as fs from 'fs';
 import { ConfigManager } from './config-manager';
-import { ProcessManager } from './process-manager';
+import { GatewayDeviceConfig, ProcessManager } from './process-manager';
 
 let mainWindow: BrowserWindow | null = null;
 let configManager: ConfigManager;
@@ -282,6 +282,73 @@ function setupIpcHandlers() {
       };
     }
   });
+
+  ipcMain.handle('gateway:get-device-config', async () => {
+    try {
+      const config = await processManager.getGatewayDeviceConfig();
+      return { success: true, config };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  ipcMain.handle('gateway:list-serial-ports', async () => {
+    try {
+      const ports = await processManager.listGatewaySerialPorts();
+      return { success: true, ports };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  ipcMain.handle(
+    'gateway:set-device-config',
+    async (_event: IpcMainInvokeEvent, config: GatewayDeviceConfig) => {
+      try {
+        const validParity = ['none', 'even', 'odd'].includes(config?.serial?.parity);
+        const validDataBits = [5, 6, 7, 8].includes(config?.serial?.dataBits);
+        const validStopBits = [1, 1.5, 2].includes(config?.serial?.stopBits);
+        if (
+          !config?.serial?.port?.trim() ||
+          !Number.isFinite(config.serial.baudRate) ||
+          config.serial.baudRate <= 0 ||
+          !validParity ||
+          !validDataBits ||
+          !validStopBits ||
+          !Number.isFinite(config?.stable?.windowMs) ||
+          config.stable.windowMs < 100 ||
+          !config.stable.pattern?.trim() ||
+          !config.stable.unstablePattern?.trim()
+        ) {
+          throw new Error('Invalid gateway configuration.');
+        }
+
+        await processManager.saveGatewayDeviceConfig({
+          serial: {
+            ...config.serial,
+            port: config.serial.port.trim(),
+          },
+          stable: {
+            windowMs: config.stable.windowMs,
+            pattern: config.stable.pattern.trim(),
+            unstablePattern: config.stable.unstablePattern.trim(),
+          },
+        });
+        return { success: true };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
 
   // Process status handlers
   ipcMain.handle('process:get-status', async () => {

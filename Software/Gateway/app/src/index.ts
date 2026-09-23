@@ -100,8 +100,11 @@ class WeighingGateway {
         autoDetect: config.serial?.autoDetect ?? true,
       },
       server: {
-        url: config.server?.url || process.env.SERVER_URL || 'http://localhost:4123',
-        apiKey: config.server?.apiKey || process.env.GATEWAY_API_KEY || '',
+        // Electron owns the local API URL and authentication key. Prefer its
+        // environment values so a stale user config cannot silently prevent
+        // the gateway from authenticating with the bundled API.
+        url: process.env.SERVER_URL || config.server?.url || 'http://localhost:4123',
+        apiKey: process.env.GATEWAY_API_KEY || config.server?.apiKey || '',
       },
       stable: {
         windowMs: config.stable?.windowMs || 1000,

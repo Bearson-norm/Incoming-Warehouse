@@ -7,7 +7,7 @@ import { Label } from '../components/ui/label';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Settings, Languages, RotateCcw, Save, Info, Globe, Database, TestTube, Play, Square, Home, Activity, FileText, LogIn, Link2, ArrowLeftRight, Layers, Cloud } from 'lucide-react';
+import { Settings, Languages, RotateCcw, Save, Info, Globe, Database, TestTube, Play, Square, Home, Activity, FileText, LogIn, Link2, ArrowLeftRight, Layers, Cloud, Usb } from 'lucide-react';
 import { CloudStatus } from '../types/weighing';
 import { toast } from 'sonner';
 import api from '../services/api';
@@ -15,6 +15,43 @@ import './Setting.css';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && (window as any).electron?.isElectron === true;
+
+interface GatewaySerialPort {
+  path: string;
+  manufacturer?: string;
+}
+
+interface GatewayDeviceConfig {
+  serial: {
+    port: string;
+    baudRate: number;
+    parity: 'none' | 'even' | 'odd';
+    dataBits: 5 | 6 | 7 | 8;
+    stopBits: 1 | 1.5 | 2;
+    autoDetect: boolean;
+  };
+  stable: {
+    windowMs: number;
+    pattern: string;
+    unstablePattern: string;
+  };
+}
+
+const defaultGatewayDeviceConfig: GatewayDeviceConfig = {
+  serial: {
+    port: '',
+    baudRate: 9600,
+    parity: 'none',
+    dataBits: 8,
+    stopBits: 1,
+    autoDetect: true,
+  },
+  stable: {
+    windowMs: 1000,
+    pattern: 'ST|STABLE|S',
+    unstablePattern: 'US|UNSTABLE|U',
+  },
+};
 
 export default function Setting() {
   const { t, language, setLanguage } = useI18n();
@@ -45,6 +82,10 @@ export default function Setting() {
   const [dbConfigLoading, setDbConfigLoading] = useState(false);
   const [dbTesting, setDbTesting] = useState(false);
   const [processStatus, setProcessStatus] = useState<any>(null);
+  const [gatewayDeviceConfig, setGatewayDeviceConfig] =
+    useState<GatewayDeviceConfig>(defaultGatewayDeviceConfig);
+  const [gatewaySerialPorts, setGatewaySerialPorts] = useState<GatewaySerialPort[]>([]);
+  const [gatewayConfigLoading, setGatewayConfigLoading] = useState(false);
 
   const [odooConfig, setOdooConfig] = useState({
     baseUrl: '',
@@ -69,6 +110,7 @@ export default function Setting() {
     if (isElectron && (window as any).electron) {
       loadDatabaseConfig();
       loadProcessStatus();
+      loadGatewayDeviceConfig();
       const interval = setInterval(loadProcessStatus, 2000);
       return () => clearInterval(interval);
     }
@@ -330,6 +372,72 @@ export default function Setting() {
       setProcessStatus(status);
     } catch (error) {
       console.error('Failed to load process status:', error);
+    }
+  };
+
+  const loadGatewayDeviceConfig = async () => {
+    if (!isElectron || !(window as any).electron?.gateway) return;
+
+    try {
+      setGatewayConfigLoading(true);
+      const configResult = await (window as any).electron.gateway.getDeviceConfig();
+      if (!configResult.success || !configResult.config) {
+        throw new Error(configResult.error || t('gatewayConfigLoadFailed'));
+      }
+      setGatewayDeviceConfig(configResult.config);
+
+      const portsResult = await (window as any).electron.gateway.listSerialPorts();
+      if (!portsResult.success) {
+        throw new Error(portsResult.error || t('gatewayPortsLoadFailed'));
+      }
+      setGatewaySerialPorts(portsResult.ports || []);
+      await loadProcessStatus();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGatewayConfigLoading(false);
+    }
+  };
+
+  const refreshGatewaySerialPorts = async () => {
+    if (!isElectron || !(window as any).electron?.gateway) return;
+
+    try {
+      setGatewayConfigLoading(true);
+      const result = await (window as any).electron.gateway.listSerialPorts();
+      if (!result.success) {
+        throw new Error(result.error || t('gatewayPortsLoadFailed'));
+      }
+      setGatewaySerialPorts(result.ports || []);
+      toast.success(t('gatewayPortsRefreshed'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGatewayConfigLoading(false);
+    }
+  };
+
+  const handleSaveGatewayDeviceConfig = async () => {
+    if (!isElectron || !(window as any).electron?.gateway) return;
+    if (!gatewayDeviceConfig.serial.port.trim()) {
+      toast.error(t('gatewayPortRequired'));
+      return;
+    }
+
+    try {
+      setGatewayConfigLoading(true);
+      const result = await (window as any).electron.gateway.setDeviceConfig(
+        gatewayDeviceConfig,
+      );
+      if (!result.success) {
+        throw new Error(result.error || t('gatewayConfigSaveFailed'));
+      }
+      toast.success(t('gatewayConfigSaved'));
+      await loadGatewayDeviceConfig();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGatewayConfigLoading(false);
     }
   };
 
@@ -670,6 +778,292 @@ export default function Setting() {
                     {language === 'id' ? 'Buka Folder Data' : 'Open Data Folder'}
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isElectron && (
+          <Card className="border-2 border-[#d7ccc8] shadow-md overflow-visible brown-hover-effect bg-[#fff8f0]">
+            <div className="h-2 brown-gradient-animated relative overflow-hidden">
+              <div className="absolute inset-0 brown-shimmer"></div>
+            </div>
+            <CardHeader className="pb-3 px-6 pt-6">
+              <CardTitle className="flex items-center gap-3 text-base leading-tight">
+                <div className="w-9 h-9 rounded-lg bg-[#f5ebe0] flex items-center justify-center flex-shrink-0 brown-pulse-animated">
+                  <Usb className="w-4 h-4 text-[#6d4c41]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[#3e2723] block leading-tight break-words">
+                    {t('gatewaySettings')}
+                  </span>
+                  <CardDescription className="text-sm mt-1 leading-relaxed text-[#8d6e63] break-words">
+                    {t('gatewaySettingsHint')}
+                  </CardDescription>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 pb-6 px-6">
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-sm font-medium text-[#5d4037]">
+                        {t('gatewaySerialPort')}
+                      </Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={refreshGatewaySerialPorts}
+                        disabled={gatewayConfigLoading}
+                        className="h-7 px-2 text-xs text-[#8d6e63]"
+                      >
+                        <RotateCcw className={`w-3 h-3 mr-1 ${gatewayConfigLoading ? 'animate-spin' : ''}`} />
+                        {t('refresh')}
+                      </Button>
+                    </div>
+                    <Select
+                      value={gatewayDeviceConfig.serial.port || undefined}
+                      onValueChange={(port) =>
+                        setGatewayDeviceConfig((prev) => ({
+                          ...prev,
+                          serial: { ...prev.serial, port },
+                        }))
+                      }
+                      disabled={gatewayConfigLoading}
+                    >
+                      <SelectTrigger className="border-[#d7ccc8]">
+                        <SelectValue placeholder={t('gatewaySelectPort')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {gatewayDeviceConfig.serial.port &&
+                          !gatewaySerialPorts.some(
+                            (port) => port.path === gatewayDeviceConfig.serial.port,
+                          ) && (
+                            <SelectItem value={gatewayDeviceConfig.serial.port}>
+                              {gatewayDeviceConfig.serial.port}
+                            </SelectItem>
+                          )}
+                        {gatewaySerialPorts.map((port) => (
+                          <SelectItem key={port.path} value={port.path}>
+                            {port.path}
+                            {port.manufacturer ? ` — ${port.manufacturer}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-[#5d4037]">
+                      {t('gatewayBaudRate')}
+                    </Label>
+                    <Select
+                      value={String(gatewayDeviceConfig.serial.baudRate)}
+                      onValueChange={(value) =>
+                        setGatewayDeviceConfig((prev) => ({
+                          ...prev,
+                          serial: { ...prev.serial, baudRate: Number(value) },
+                        }))
+                      }
+                      disabled={gatewayConfigLoading}
+                    >
+                      <SelectTrigger className="border-[#d7ccc8]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].map(
+                          (baudRate) => (
+                            <SelectItem key={baudRate} value={String(baudRate)}>
+                              {baudRate}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-[#5d4037]">
+                      {t('gatewayParity')}
+                    </Label>
+                    <Select
+                      value={gatewayDeviceConfig.serial.parity}
+                      onValueChange={(parity: 'none' | 'even' | 'odd') =>
+                        setGatewayDeviceConfig((prev) => ({
+                          ...prev,
+                          serial: { ...prev.serial, parity },
+                        }))
+                      }
+                      disabled={gatewayConfigLoading}
+                    >
+                      <SelectTrigger className="border-[#d7ccc8]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t('gatewayParityNone')}</SelectItem>
+                        <SelectItem value="even">{t('gatewayParityEven')}</SelectItem>
+                        <SelectItem value="odd">{t('gatewayParityOdd')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-[#5d4037]">
+                      {t('gatewayDataBits')}
+                    </Label>
+                    <Select
+                      value={String(gatewayDeviceConfig.serial.dataBits)}
+                      onValueChange={(value) =>
+                        setGatewayDeviceConfig((prev) => ({
+                          ...prev,
+                          serial: {
+                            ...prev.serial,
+                            dataBits: Number(value) as 5 | 6 | 7 | 8,
+                          },
+                        }))
+                      }
+                      disabled={gatewayConfigLoading}
+                    >
+                      <SelectTrigger className="border-[#d7ccc8]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[5, 6, 7, 8].map((bits) => (
+                          <SelectItem key={bits} value={String(bits)}>
+                            {bits}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-[#5d4037]">
+                      {t('gatewayStopBits')}
+                    </Label>
+                    <Select
+                      value={String(gatewayDeviceConfig.serial.stopBits)}
+                      onValueChange={(value) =>
+                        setGatewayDeviceConfig((prev) => ({
+                          ...prev,
+                          serial: {
+                            ...prev.serial,
+                            stopBits: Number(value) as 1 | 1.5 | 2,
+                          },
+                        }))
+                      }
+                      disabled={gatewayConfigLoading}
+                    >
+                      <SelectTrigger className="border-[#d7ccc8]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 1.5, 2].map((bits) => (
+                          <SelectItem key={bits} value={String(bits)}>
+                            {bits}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-[#5d4037]">
+                      {t('gatewayStableWindow')}
+                    </Label>
+                    <Input
+                      type="number"
+                      min={100}
+                      max={10000}
+                      step={100}
+                      value={gatewayDeviceConfig.stable.windowMs}
+                      onChange={(event) =>
+                        setGatewayDeviceConfig((prev) => ({
+                          ...prev,
+                          stable: {
+                            ...prev.stable,
+                            windowMs: Number(event.target.value),
+                          },
+                        }))
+                      }
+                      disabled={gatewayConfigLoading}
+                      className="border-[#d7ccc8]"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-3 rounded-lg border border-[#d7ccc8] bg-[#f5ebe0] p-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={gatewayDeviceConfig.serial.autoDetect}
+                    onChange={(event) =>
+                      setGatewayDeviceConfig((prev) => ({
+                        ...prev,
+                        serial: {
+                          ...prev.serial,
+                          autoDetect: event.target.checked,
+                        },
+                      }))
+                    }
+                    disabled={gatewayConfigLoading}
+                    className="h-4 w-4 accent-[#6d4c41]"
+                  />
+                  <span className="text-sm text-[#5d4037]">{t('gatewayAutoDetect')}</span>
+                </label>
+
+                <details className="rounded-lg border border-[#d7ccc8] bg-[#f5ebe0] p-4">
+                  <summary className="cursor-pointer text-sm font-medium text-[#5d4037]">
+                    {t('gatewayAdvancedSettings')}
+                  </summary>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm text-[#5d4037]">{t('gatewayStablePattern')}</Label>
+                      <Input
+                        value={gatewayDeviceConfig.stable.pattern}
+                        onChange={(event) =>
+                          setGatewayDeviceConfig((prev) => ({
+                            ...prev,
+                            stable: { ...prev.stable, pattern: event.target.value },
+                          }))
+                        }
+                        disabled={gatewayConfigLoading}
+                        className="font-mono border-[#d7ccc8]"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm text-[#5d4037]">{t('gatewayUnstablePattern')}</Label>
+                      <Input
+                        value={gatewayDeviceConfig.stable.unstablePattern}
+                        onChange={(event) =>
+                          setGatewayDeviceConfig((prev) => ({
+                            ...prev,
+                            stable: {
+                              ...prev.stable,
+                              unstablePattern: event.target.value,
+                            },
+                          }))
+                        }
+                        disabled={gatewayConfigLoading}
+                        className="font-mono border-[#d7ccc8]"
+                      />
+                    </div>
+                  </div>
+                </details>
+
+                <Button
+                  onClick={handleSaveGatewayDeviceConfig}
+                  disabled={
+                    gatewayConfigLoading ||
+                    !gatewayDeviceConfig.serial.port.trim() ||
+                    gatewayDeviceConfig.stable.windowMs < 100
+                  }
+                  className="brown-gradient-animated text-white font-semibold shadow-md"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {gatewayConfigLoading ? t('gatewaySaving') : t('gatewaySaveRestart')}
+                </Button>
               </div>
             </CardContent>
           </Card>

@@ -8,6 +8,7 @@ import { CloudClientService } from './cloud-client.service';
 import { CloudSyncService } from './cloud-sync.service';
 import { CloudSyncApiKeyGuard } from './guards/cloud-sync-api-key.guard';
 import { CloudAccessGuard } from './guards/cloud-access.guard';
+import { CloudMasterDataService } from './cloud-master-data.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -29,7 +30,14 @@ import { PrismaModule } from '../prisma/prisma.module';
     CloudSyncService,
     CloudSyncApiKeyGuard,
     CloudAccessGuard,
+    CloudMasterDataService,
   ],
-  exports: [CloudSettingsService, CloudSyncService, CloudClientService, CloudStorageService],
+  exports: [
+    CloudSettingsService,
+    CloudSyncService,
+    CloudClientService,
+    CloudStorageService,
+    CloudMasterDataService,
+  ],
 })
 export class CloudModule {}

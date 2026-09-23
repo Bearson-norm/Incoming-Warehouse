@@ -1,9 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueryReadingsDto } from './dto/query-readings.dto';
 import { CreateReadingDto } from './dto/create-reading.dto';
 import { UpdateReadingLabelDto } from './dto/update-reading-label.dto';
+import { CloudSyncService } from '../cloud/cloud-sync.service';
 
 type Requester = { userId: number; role: string };
 
@@ -21,7 +26,10 @@ const sessionInclude = {
 
 @Injectable()
 export class ReadingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudSync: CloudSyncService,
+  ) {}
 
   private caseInsensitiveFilter(
     operation: 'contains' | 'equals',
@@ -40,14 +48,20 @@ export class ReadingsService {
     return operation === 'equals' ? { contains: value } : filter;
   }
 
-  private scopedUserId(query: QueryReadingsDto, requester: Requester): number | undefined {
+  private scopedUserId(
+    query: QueryReadingsDto,
+    requester: Requester,
+  ): number | undefined {
     if (requester.role === 'admin') {
       return query.userId;
     }
     return requester.userId;
   }
 
-  private buildWhere(query: QueryReadingsDto, requester: Requester): Prisma.WeighReadingWhereInput {
+  private buildWhere(
+    query: QueryReadingsDto,
+    requester: Requester,
+  ): Prisma.WeighReadingWhereInput {
     const {
       sessionId,
       vendorId,
@@ -124,7 +138,8 @@ export class ReadingsService {
 
   async findAll(query: QueryReadingsDto, requester: Requester) {
     const page = query.page && query.page > 0 ? query.page : 1;
-    const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
+    const limit =
+      query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
     const where = this.buildWhere(query, requester);
     const skip = (page - 1) * limit;
 
@@ -173,10 +188,7 @@ export class ReadingsService {
       },
     });
 
-    const bySession = new Map<
-      number,
-      { netWeight: number; label: string }
-    >();
+    const bySession = new Map<number, { netWeight: number; label: string }>();
     for (const reading of readings) {
       if (bySession.has(reading.sessionId)) {
         continue;
@@ -188,7 +200,8 @@ export class ReadingsService {
         reading.session.packageUid ||
         'LPN';
       bySession.set(reading.sessionId, {
-        netWeight: reading.netWeight && reading.netWeight > 0 ? reading.netWeight : 0,
+        netWeight:
+          reading.netWeight && reading.netWeight > 0 ? reading.netWeight : 0,
         label,
       });
     }
@@ -283,21 +296,31 @@ export class ReadingsService {
       throw new NotFoundException(`Reading with ID ${id} not found`);
     }
 
-    if (requester.role !== 'admin' && reading.session.userId !== requester.userId) {
+    if (
+      requester.role !== 'admin' &&
+      reading.session.userId !== requester.userId
+    ) {
       throw new NotFoundException('Reading not found');
     }
 
     return reading;
   }
 
-  async updateLabel(id: number, dto: UpdateReadingLabelDto, requester: Requester) {
+  async updateLabel(
+    id: number,
+    dto: UpdateReadingLabelDto,
+    requester: Requester,
+  ) {
     const reading = await this.findOne(id, requester);
 
     const nextLpn = dto.packageUid?.trim();
     let nextMetadata: Record<string, unknown> = {};
     if (reading.session.labelMetadata) {
       try {
-        nextMetadata = JSON.parse(reading.session.labelMetadata) as Record<string, unknown>;
+        nextMetadata = JSON.parse(reading.session.labelMetadata) as Record<
+          string,
+          unknown
+        >;
       } catch {
         nextMetadata = {};
       }
@@ -326,7 +349,19 @@ export class ReadingsService {
       }),
     ]);
 
-    return this.findOne(id, requester);
+    const updated = await this.findOne(id, requester);
+    this.cloudSync.scheduleTraceEvent(
+      updated.session,
+      updated.session.user.username,
+      'LABEL_UPDATED',
+      `reading-${id}-label-${Date.now()}`,
+      {
+        previousLpn: reading.packageUid || reading.session.packageUid,
+        packageUid: updated.packageUid || updated.session.packageUid,
+        labelMetadata: nextMetadata,
+      },
+    );
+    return updated;
   }
 
   async create(createReadingDto: CreateReadingDto, userId: number) {
@@ -339,7 +374,9 @@ export class ReadingsService {
     });
 
     if (!session) {
-      throw new NotFoundException(`Session with ID ${createReadingDto.sessionId} not found`);
+      throw new NotFoundException(
+        `Session with ID ${createReadingDto.sessionId} not found`,
+      );
     }
 
     if (session.userId !== userId) {

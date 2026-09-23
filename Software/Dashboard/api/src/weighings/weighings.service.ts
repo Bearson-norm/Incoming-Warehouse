@@ -9,7 +9,10 @@ import { Prisma, WeighReading, WeighSession } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { OdooWeighingService } from '../odoo/odoo-weighing.service';
 import { ConfirmWeighingDto } from './dto/confirm-weighing.dto';
-import { WeightSnapshot, WeightSnapshotStore } from '../websocket/weight-snapshot.store';
+import {
+  WeightSnapshot,
+  WeightSnapshotStore,
+} from '../websocket/weight-snapshot.store';
 import { CloudSyncService } from '../cloud/cloud-sync.service';
 
 type SessionWithPackaging = WeighSession & {
@@ -90,14 +93,20 @@ export class WeighingsService {
     }
 
     if (reading.session.weighingMethod !== 'internal') {
-      throw new BadRequestException('Only internal weighings can be sent to Odoo from this action');
+      throw new BadRequestException(
+        'Only internal weighings can be sent to Odoo from this action',
+      );
     }
 
     if (reading.odooLogId) {
       return this.toConfirmResult(reading.session, reading);
     }
 
-    const packageUid = (reading.packageUid || reading.session.packageUid || '').trim();
+    const packageUid = (
+      reading.packageUid ||
+      reading.session.packageUid ||
+      ''
+    ).trim();
     if (!packageUid) {
       throw new BadRequestException('LPN is required before sending to Odoo');
     }
@@ -105,7 +114,10 @@ export class WeighingsService {
     const unit = reading.unit || 'kg';
     const grossSource = reading.grossWeight ?? reading.weight;
     const grossWeightKg = this.odooWeighing.toGrossWeightKg(grossSource, unit);
-    const odooResult = await this.odooWeighing.submitWeight(packageUid, grossWeightKg);
+    const odooResult = await this.odooWeighing.submitWeight(
+      packageUid,
+      grossWeightKg,
+    );
 
     const updated = await this.prisma.weighReading.update({
       where: { id: reading.id },
@@ -122,6 +134,7 @@ export class WeighingsService {
       },
     });
 
+    await this.triggerCloudSync(updated, reading.session, userId);
     return this.toConfirmResult(reading.session, updated);
   }
 
@@ -135,8 +148,14 @@ export class WeighingsService {
     }
 
     const unit = snapshot.unit || 'kg';
-    const grossWeightKg = this.odooWeighing.toGrossWeightKg(snapshot.weight, unit);
-    const odooResult = await this.odooWeighing.submitWeight(packageUid, grossWeightKg);
+    const grossWeightKg = this.odooWeighing.toGrossWeightKg(
+      snapshot.weight,
+      unit,
+    );
+    const odooResult = await this.odooWeighing.submitWeight(
+      packageUid,
+      grossWeightKg,
+    );
 
     const readingData: Prisma.WeighReadingUncheckedCreateInput = {
       sessionId: session.id,
@@ -144,7 +163,9 @@ export class WeighingsService {
       unit,
       stable: true,
       rawLine: snapshot.rawLine ?? null,
-      capturedAt: snapshot.capturedAt ? new Date(snapshot.capturedAt) : new Date(),
+      capturedAt: snapshot.capturedAt
+        ? new Date(snapshot.capturedAt)
+        : new Date(),
       savedAt: new Date(),
       packageUid,
       odooLogId: odooResult.log_id,
@@ -194,7 +215,10 @@ export class WeighingsService {
     snapshot: WeightSnapshot,
   ) {
     const unit = snapshot.unit || 'kg';
-    const grossWeightKg = this.odooWeighing.toGrossWeightKg(snapshot.weight, unit);
+    const grossWeightKg = this.odooWeighing.toGrossWeightKg(
+      snapshot.weight,
+      unit,
+    );
     const packageUid = session.packageUid?.trim() || null;
     const flowType = session.flowType === 'intrans' ? 'intrans' : 'incoming';
 
@@ -203,7 +227,9 @@ export class WeighingsService {
     if (flowType === 'incoming') {
       const tare = session.packaging?.tareWeight;
       if (tare == null) {
-        throw new BadRequestException('Internal incoming weighing requires packaging tare weight');
+        throw new BadRequestException(
+          'Internal incoming weighing requires packaging tare weight',
+        );
       }
       tareWeight = tare;
       netWeight = Math.round((grossWeightKg - tare) * 1000) / 1000;
@@ -215,7 +241,9 @@ export class WeighingsService {
       unit,
       stable: true,
       rawLine: snapshot.rawLine ?? null,
-      capturedAt: snapshot.capturedAt ? new Date(snapshot.capturedAt) : new Date(),
+      capturedAt: snapshot.capturedAt
+        ? new Date(snapshot.capturedAt)
+        : new Date(),
       savedAt: new Date(),
       packageUid,
       grossWeight: grossWeightKg,
@@ -250,7 +278,11 @@ export class WeighingsService {
       where: { id: userId },
       select: { username: true },
     });
-    this.cloudSync.scheduleSyncReading(reading, session, user?.username || 'unknown');
+    this.cloudSync.scheduleSyncReading(
+      reading,
+      session,
+      user?.username || 'unknown',
+    );
   }
 
   private async persistReading(
@@ -271,7 +303,10 @@ export class WeighingsService {
     });
   }
 
-  private toConfirmResult(session: Pick<WeighSession, 'packageUid' | 'weighingMethod' | 'flowType'>, reading: WeighReading) {
+  private toConfirmResult(
+    session: Pick<WeighSession, 'packageUid' | 'weighingMethod' | 'flowType'>,
+    reading: WeighReading,
+  ) {
     return {
       success: true,
       readingId: reading.id,

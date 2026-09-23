@@ -1,13 +1,22 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRmCodeDto } from './dto/create-rm-code.dto';
 import { UpdateRmCodeDto } from './dto/update-rm-code.dto';
+import { CloudSettingsService } from '../cloud/cloud-settings.service';
 
 @Injectable()
 export class RmCodesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudSettings: CloudSettingsService,
+  ) {}
 
   create(dto: CreateRmCodeDto) {
+    this.assertLocalMutationAllowed();
     return this.prisma.rmCode.create({
       data: {
         code: dto.code.trim(),
@@ -18,6 +27,7 @@ export class RmCodesService {
 
   findAll() {
     return this.prisma.rmCode.findMany({
+      where: { deletedAt: null },
       orderBy: { code: 'asc' },
     });
   }
@@ -31,6 +41,7 @@ export class RmCodesService {
   }
 
   async update(id: number, dto: UpdateRmCodeDto) {
+    this.assertLocalMutationAllowed();
     await this.findOne(id);
     return this.prisma.rmCode.update({
       where: { id },
@@ -42,7 +53,16 @@ export class RmCodesService {
   }
 
   async remove(id: number) {
+    this.assertLocalMutationAllowed();
     await this.findOne(id);
     return this.prisma.rmCode.delete({ where: { id } });
+  }
+
+  private assertLocalMutationAllowed() {
+    if (this.cloudSettings.isRemoteMode()) {
+      throw new ForbiddenException(
+        'Master data is managed from Cloud Server. Local database is a read-only cache.',
+      );
+    }
   }
 }

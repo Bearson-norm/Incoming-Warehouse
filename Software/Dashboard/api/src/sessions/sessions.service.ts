@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { WeightSnapshotStore } from '../websocket/weight-snapshot.store';
+import { CloudSyncService } from '../cloud/cloud-sync.service';
 
 const LPN_REGEX = /^[A-Za-z0-9][A-Za-z0-9/_-]*$/;
 
@@ -29,9 +30,13 @@ export class SessionsService {
   constructor(
     private prisma: PrismaService,
     private snapshots: WeightSnapshotStore,
+    private cloudSync: CloudSyncService,
   ) {}
 
-  private assertLpn(packageUid: string | undefined, required: boolean): string | null {
+  private assertLpn(
+    packageUid: string | undefined,
+    required: boolean,
+  ): string | null {
     const lpn = packageUid?.trim() || '';
     if (!lpn) {
       if (required) {
@@ -48,7 +53,8 @@ export class SessionsService {
   }
 
   async create(userId: number, dto: CreateSessionDto) {
-    const weighingMethod = dto.weighingMethod === 'internal' ? 'internal' : 'odoo';
+    const weighingMethod =
+      dto.weighingMethod === 'internal' ? 'internal' : 'odoo';
     const flowType = dto.flowType === 'intrans' ? 'intrans' : 'incoming';
 
     let packageUid: string | null;
@@ -59,7 +65,9 @@ export class SessionsService {
     const scaleId = dto.scaleId;
     const scaleName = dto.scaleName?.trim();
     if (!scaleId || !scaleName) {
-      throw new BadRequestException('Scale selection is required before starting a session');
+      throw new BadRequestException(
+        'Scale selection is required before starting a session',
+      );
     }
 
     if (flowType === 'intrans') {
@@ -83,12 +91,16 @@ export class SessionsService {
         throw new BadRequestException('Packaging not found');
       }
       if (packaging.vendorId !== vendorId) {
-        throw new BadRequestException('Packaging does not belong to the selected vendor');
+        throw new BadRequestException(
+          'Packaging does not belong to the selected vendor',
+        );
       }
       if (packaging.tareWeight == null) {
         throw new BadRequestException('Selected packaging has no tare weight');
       }
-      const rm = await this.prisma.rmCode.findUnique({ where: { id: rmCodeId } });
+      const rm = await this.prisma.rmCode.findUnique({
+        where: { id: rmCodeId },
+      });
       if (!rm) {
         throw new BadRequestException('RM code not found');
       }
@@ -104,7 +116,7 @@ export class SessionsService {
       },
     });
 
-    return this.prisma.weighSession.create({
+    const created = await this.prisma.weighSession.create({
       data: {
         packageUid,
         vendorId,
@@ -122,6 +134,23 @@ export class SessionsService {
       },
       include: sessionInclude,
     });
+    this.cloudSync.scheduleTraceEvent(
+      created,
+      created.user.username,
+      'SESSION_CREATED',
+      `session-${created.id}-created`,
+      {
+        flowType: created.flowType,
+        weighingMethod: created.weighingMethod,
+        vendorCloudId: created.vendor?.cloudId,
+        vendorSnapshot: created.vendor?.name,
+        packagingCloudId: created.packaging?.cloudId,
+        packagingSnapshot: created.packaging?.name,
+        rmCodeCloudId: created.rmCode?.cloudId,
+        rmCodeSnapshot: created.rmCode?.code,
+      },
+    );
+    return created;
   }
 
   async findActive(userId: number, flowType?: string) {
@@ -207,14 +236,14 @@ export class SessionsService {
       throw new BadRequestException('Session has already ended');
     }
 
-    const snapshot = this.snapshots.getUsable(session.gatewayId);
+    const snapshot = this.snapshots.getFreshStable(session.gatewayId);
     if (!snapshot) {
       throw new BadRequestException(
         'No stable scale reading. Wait for a live stable weight before starting.',
       );
     }
 
-    return this.prisma.weighSession.update({
+    const updated = await this.prisma.weighSession.update({
       where: { id },
       data: {
         weighingStarted: true,
@@ -224,8 +253,17 @@ export class SessionsService {
         vendor: true,
         packaging: true,
         rmCode: true,
+        user: { select: { username: true } },
       },
     });
+    this.cloudSync.scheduleTraceEvent(
+      updated,
+      updated.user.username,
+      'RECORDING_STARTED',
+      `session-${updated.id}-recording-started`,
+      { gatewayId: updated.gatewayId },
+    );
+    return updated;
   }
 
   async end(id: number, userId: number) {

@@ -1,6 +1,7 @@
 import {
   IsDateString,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -27,14 +28,76 @@ export class IngestCloudReadingDto {
   stationId?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  eventId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  deviceId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  gatewayId?: string;
+
+  @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   localReadingId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  localSessionId?: number;
 
   @IsOptional()
   @IsString()
   @MaxLength(64)
   packageUid?: string;
+
+  @IsOptional()
+  @IsString()
+  vendorCloudId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  vendorSnapshot?: string;
+
+  @IsOptional()
+  @IsString()
+  packagingCloudId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  packagingSnapshot?: string;
+
+  @IsOptional()
+  @IsString()
+  rmCodeCloudId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  rmCodeSnapshot?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  labelMetadata?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  odooLogId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  odooPackageId?: number;
 
   @IsIn(['incoming', 'intrans'])
   flowType: 'incoming' | 'intrans';

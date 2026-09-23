@@ -17,6 +17,30 @@ export interface ProcessStatus {
   };
 }
 
+export interface GatewayDeviceConfig {
+  serial: {
+    port: string;
+    baudRate: number;
+    parity: 'none' | 'even' | 'odd';
+    dataBits: 5 | 6 | 7 | 8;
+    stopBits: 1 | 1.5 | 2;
+    autoDetect: boolean;
+  };
+  stable: {
+    windowMs: number;
+    pattern: string;
+    unstablePattern: string;
+  };
+}
+
+export interface GatewaySerialPort {
+  path: string;
+  manufacturer?: string;
+  serialNumber?: string;
+  vendorId?: string;
+  productId?: string;
+}
+
 export class ProcessManager {
   private apiProcess: ChildProcess | null = null;
   private gatewayProcess: ChildProcess | null = null;
@@ -83,6 +107,95 @@ export class ProcessManager {
 
   constructor(configManager: ConfigManager) {
     this.configManager = configManager;
+  }
+
+  private async requestGatewayConfig<T>(
+    endpoint: string,
+    init?: { method?: 'GET' | 'POST'; body?: unknown },
+  ): Promise<T> {
+    const response = await fetch(`http://127.0.0.1:4124${endpoint}`, {
+      method: init?.method || 'GET',
+      headers: {
+        'X-Gateway-Key': this.configManager.getGatewayApiKey(),
+        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+    });
+
+    const text = await response.text();
+    if (!response.ok) {
+      let message = text;
+      try {
+        const parsed = JSON.parse(text) as { error?: string };
+        message = parsed.error || text;
+      } catch {
+        // Keep the raw response.
+      }
+      throw new Error(`Gateway configuration request failed (${response.status}): ${message}`);
+    }
+
+    return (text ? JSON.parse(text) : {}) as T;
+  }
+
+  private async waitForGatewayConfig(timeoutMs = 8000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let lastError: Error | null = null;
+
+    while (Date.now() < deadline) {
+      try {
+        await this.requestGatewayConfig('/api/config');
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+
+    throw new Error(
+      lastError?.message || 'Gateway configuration service did not become ready.',
+    );
+  }
+
+  private async ensureGatewayConfigReady(): Promise<void> {
+    if (!this.isProcessAlive(this.gatewayProcess)) {
+      await this.startGateway();
+    }
+    await this.waitForGatewayConfig();
+  }
+
+  async getGatewayDeviceConfig(): Promise<GatewayDeviceConfig> {
+    await this.ensureGatewayConfigReady();
+    const config = await this.requestGatewayConfig<
+      GatewayDeviceConfig & { server?: { url?: string; apiKey?: string } }
+    >('/api/config');
+    return {
+      serial: config.serial,
+      stable: config.stable,
+    };
+  }
+
+  async listGatewaySerialPorts(): Promise<GatewaySerialPort[]> {
+    await this.ensureGatewayConfigReady();
+    return this.requestGatewayConfig<GatewaySerialPort[]>('/api/serial-ports');
+  }
+
+  async saveGatewayDeviceConfig(config: GatewayDeviceConfig): Promise<void> {
+    await this.ensureGatewayConfigReady();
+    await this.requestGatewayConfig('/api/config', {
+      method: 'POST',
+      body: {
+        serial: config.serial,
+        server: {
+          url: `http://localhost:${this.apiPort}`,
+          apiKey: this.configManager.getGatewayApiKey(),
+        },
+        stable: config.stable,
+      },
+    });
+
+    await this.stopGateway();
+    await this.startGateway();
+    await this.waitForGatewayConfig();
   }
 
   /**

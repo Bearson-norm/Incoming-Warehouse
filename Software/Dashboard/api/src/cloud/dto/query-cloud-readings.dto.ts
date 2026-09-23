@@ -16,6 +16,18 @@ export class QueryCloudReadingsDto {
   stationId?: string;
 
   @IsOptional()
+  @IsString()
+  packageUid?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
+
+  @IsOptional()
+  @IsString()
+  flowType?: string;
+
+  @IsOptional()
   @IsDateString()
   from?: string;
 

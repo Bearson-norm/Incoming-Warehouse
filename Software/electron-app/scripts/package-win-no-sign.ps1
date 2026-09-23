@@ -20,6 +20,31 @@ $env:CSC_KEY_PASSWORD = ""
 $env:CSC_NAME = ""
 
 $packStartTime = Get-Date
+$portableOutputPath = Join-Path $releasePath 'win-unpacked'
+$portableDataBackup = Join-Path $env:TEMP "incoming-warehouse-portable-data-$([guid]::NewGuid())"
+$portableDataFiles = @(
+    'config.json',
+    'cloud-settings.json',
+    'odoo-settings.json',
+    'incoming-warehouse.db'
+)
+
+# electron-builder recreates win-unpacked. Preserve portable runtime data so
+# packaging never deletes the station configuration or local weighing history.
+$hasPortableDataBackup = $false
+foreach ($fileName in $portableDataFiles) {
+    $source = Join-Path $portableOutputPath $fileName
+    if (Test-Path $source) {
+        if (-not $hasPortableDataBackup) {
+            New-Item -ItemType Directory -Path $portableDataBackup -Force | Out-Null
+            $hasPortableDataBackup = $true
+        }
+        Copy-Item $source (Join-Path $portableDataBackup $fileName) -Force
+    }
+}
+if ($hasPortableDataBackup) {
+    Write-Host "Backed up portable config/database before packaging." -ForegroundColor Gray
+}
 
 Write-Host "Packaging Windows app without code signing..." -ForegroundColor Green
 Write-Host "Environment variables set:" -ForegroundColor Yellow
@@ -254,6 +279,19 @@ try {
     if (Test-Path $tempConfigFile) {
         Remove-Item $tempConfigFile -ErrorAction SilentlyContinue
         Write-Host "Cleaned up temporary config file" -ForegroundColor Gray
+    }
+
+    if ($hasPortableDataBackup -and (Test-Path $portableOutputPath)) {
+        foreach ($fileName in $portableDataFiles) {
+            $backupFile = Join-Path $portableDataBackup $fileName
+            if (Test-Path $backupFile) {
+                Copy-Item $backupFile (Join-Path $portableOutputPath $fileName) -Force
+            }
+        }
+        Write-Host "Restored portable config/database after packaging." -ForegroundColor Gray
+    }
+    if (Test-Path $portableDataBackup) {
+        Remove-Item -Recurse -Force $portableDataBackup -ErrorAction SilentlyContinue
     }
 }
 

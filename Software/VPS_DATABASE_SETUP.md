@@ -239,3 +239,42 @@ psql "postgresql://admin:admin123@YOUR_VPS_IP:5432/wis_foom" -c "\dt"
 | Connection refused | Check firewall (port 5432), `listen_addresses`, `pg_hba.conf` |
 | Authentication failed | Verify password, ensure `pg_hba.conf` allows md5 for admin |
 | Docker: API can't connect to postgres | Ensure both in same `docker-compose` network; use hostname `postgres` |
+
+---
+
+## Audit, retention, and recovery
+
+Migration `20260923150000_cloud_audit_master_data` adds canonical cloud IDs, revision
+control, soft delete, `MasterDataAuditEvent`, and `LpnTraceEvent`. Deploy it before
+stations running the matching Electron release begin master-data sync:
+
+```bash
+docker compose run --rm api npx prisma migrate deploy
+docker compose up -d api
+```
+
+Operational guidance:
+
+1. Back up PostgreSQL before migration and test restore on staging.
+2. Use a restricted runtime DB role. Only the migration role should own/alter tables.
+3. Do not grant application users direct SQL access to audit tables.
+4. Back up audit and trace tables on the same schedule as weighing records.
+5. Define retention with Finance/Compliance; soft-deleted master records must remain at
+   least as long as weigh records that reference their snapshots.
+6. After restore, verify counts and sample one LPN across `CloudWeighReading` and
+   `LpnTraceEvent`, then verify its exported SHA-256 manifest.
+
+`MasterDataAuditEvent` is append-only by application design. PostgreSQL superusers can
+still alter it; for stronger non-repudiation, archive signed exports or database backups
+to immutable/WORM storage managed outside the application account.
+
+### Data lineage
+
+- `capturedAt` / trace `sourceAt`: source device time.
+- `syncedAt` / trace `receivedAt`: VPS receipt time.
+- `stationId + localReadingId`: idempotency key for weighing records.
+- `stationId + localEventId`: idempotency key for trace events.
+- `*Snapshot`: value used when the transaction occurred.
+- `*CloudId`: reference used to resolve the current canonical master-data name.
+- `revision`: optimistic-lock version; skipped revisions indicate a defect and should be
+  investigated.

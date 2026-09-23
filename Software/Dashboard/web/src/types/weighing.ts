@@ -1,23 +1,41 @@
-export type WeighingMethod = 'odoo' | 'internal';
-export type FlowType = 'incoming' | 'intrans';
+export type WeighingMethod = "odoo" | "internal";
+export type FlowType = "incoming" | "intrans";
 
 export interface RmCode {
   id: number;
+  cloudId: string;
   code: string;
   name?: string | null;
+  issuedAt: string;
+  revision: number;
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Vendor {
   id: number;
+  cloudId: string;
   name: string;
+  revision: number;
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
   packagings?: Packaging[];
 }
 
 export interface Packaging {
   id: number;
+  cloudId: string;
   vendorId: number;
+  vendorCloudId?: string;
   name: string;
   tareWeight: number | null;
+  metadata?: string | null;
+  revision: number;
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CloudScale {
@@ -35,7 +53,21 @@ export interface CloudWeighReading {
   username: string;
   stationId?: string | null;
   localReadingId?: number | null;
+  localSessionId?: number | null;
+  deviceId?: string | null;
+  gatewayId?: string | null;
   packageUid?: string | null;
+  vendorCloudId?: string | null;
+  vendorSnapshot?: string | null;
+  currentVendorName?: string | null;
+  packagingCloudId?: string | null;
+  packagingSnapshot?: string | null;
+  currentPackagingName?: string | null;
+  rmCodeCloudId?: string | null;
+  rmCodeSnapshot?: string | null;
+  currentRmName?: string | null;
+  labelMetadata?: string | null;
+  odooLogId?: number | null;
   flowType: FlowType;
   weighingMethod: WeighingMethod;
   weight: number;
@@ -48,6 +80,47 @@ export interface CloudWeighReading {
   syncedAt?: string;
 }
 
+export type MasterEntityType = "vendor" | "packaging" | "rmCode";
+
+export interface CloudMasterSnapshot {
+  vendors: Vendor[];
+  packagings: Packaging[];
+  rmCodes: RmCode[];
+  cursor: string;
+  generatedAt: string;
+}
+
+export interface MasterDataAuditEvent {
+  id: string;
+  entityType: MasterEntityType;
+  entityCloudId: string;
+  action: "create" | "update" | "delete";
+  revision: number;
+  beforeJson?: Record<string, unknown> | null;
+  afterJson?: Record<string, unknown> | null;
+  reason: string;
+  actorUsername: string;
+  stationId?: string | null;
+  deviceId?: string | null;
+  createdAt: string;
+}
+
+export interface LpnTraceEvent {
+  id: string;
+  stationId: string;
+  localEventId: string;
+  packageUid: string;
+  eventType: string;
+  username: string;
+  deviceId?: string | null;
+  gatewayId?: string | null;
+  scaleId?: number | null;
+  scaleName?: string | null;
+  sourceAt: string;
+  receivedAt: string;
+  payload?: Record<string, unknown> | null;
+}
+
 export interface CloudStatus {
   serverUrl?: string;
   hasSyncApiKey?: boolean;
@@ -57,6 +130,8 @@ export interface CloudStatus {
   mode?: string;
   activeScales?: number;
   totalReadings?: number;
+  unsyncedReadings?: number;
+  unsyncedTraceEvents?: number;
   error?: string;
 }
 
@@ -119,7 +194,9 @@ export interface Reading {
   };
 }
 
-export function parseLabelMetadata(raw?: string | null): Record<string, unknown> {
+export function parseLabelMetadata(
+  raw?: string | null,
+): Record<string, unknown> {
   if (!raw) return {};
   try {
     return JSON.parse(raw) as Record<string, unknown>;
@@ -129,5 +206,5 @@ export function parseLabelMetadata(raw?: string | null): Record<string, unknown>
 }
 
 export function readingLpn(reading: Reading): string {
-  return reading.packageUid || reading.session.packageUid || '';
+  return reading.packageUid || reading.session.packageUid || "";
 }

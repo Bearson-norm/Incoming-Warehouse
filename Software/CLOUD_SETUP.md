@@ -147,3 +147,42 @@ curl -s http://wis.moof-set.web.id/api/health
 - [VPS_DATABASE_SETUP.md](VPS_DATABASE_SETUP.md) — backup/restore Postgres
 - [electron-app/README.md](electron-app/README.md)
 - [ELECTRON_SETUP.md](ELECTRON_SETUP.md)
+
+## Audit LPN dan master data terpusat
+
+Cloud Server adalah sumber record lintas station, bukan pengganti database operasional
+SQLite saat perangkat offline. Setiap hasil timbang yang tersimpan mengirim:
+
+- LPN, flow/method, berat, status, referensi Odoo, dan waktu pengambilan;
+- station/device, gateway, timbangan, operator, local session/reading ID;
+- ID canonical serta snapshot nama vendor, kemasan, dan RM pada saat transaksi.
+
+Pencarian **Cloud Server → Tracing LPN** menyusun event dari beberapa perangkat dan
+timbangan. `sourceAt` adalah waktu kejadian pada device, sedangkan `receivedAt` adalah
+waktu event diterima VPS. Selisih keduanya normal ketika device offline. Retry memakai
+`stationId + localEventId`, sehingga tidak membuat event audit ganda.
+
+Nama pada transaksi lama tidak pernah ditulis ulang. UI menampilkan snapshot historis
+dan, bila berbeda, nama canonical terbaru. Ini menjaga bukti transaksi sekaligus membantu
+operator memakai nama terkini.
+
+### Master data
+
+- Vendor, kemasan, dan RM hanya diedit admin melalui **Cloud Server → Edit Database**.
+- Halaman **Database** Electron adalah cache read-only. Cache ditarik saat API mulai,
+  setiap lima menit, atau melalui tombol **Sinkronkan**.
+- Setiap perubahan wajib memiliki alasan dan `expectedRevision`. Jika admin lain telah
+  mengubah record, server menjawab HTTP 409; reload sebelum mengulangi perubahan.
+- Hapus berarti soft delete. Record dan audit history tetap ada untuk tracing.
+- Tanggal terbit RM adalah `issuedAt`; waktu pembentukan/perubahan memakai
+  `createdAt`/`updatedAt`.
+
+### Bukti audit
+
+Ekspor LPN menghasilkan JSON rinci, CSV, dan manifest SHA-256. Simpan ketiganya bersama.
+Hash mendeteksi perubahan file setelah ekspor, tetapi audit append-only pada aplikasi
+bukan perlindungan absolut terhadap administrator database. Batasi kredensial PostgreSQL,
+aktifkan backup, dan tetapkan retention sesuai kebijakan financing/audit perusahaan.
+
+Event audit master data menyimpan actor, waktu, station/device, action, revision, alasan,
+serta nilai before/after. API tidak menyediakan update atau delete untuk event audit.

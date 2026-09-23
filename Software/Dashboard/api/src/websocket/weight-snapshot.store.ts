@@ -33,22 +33,49 @@ export class WeightSnapshotStore {
     preferredGatewayId?: string | null,
     maxAgeMs = DEFAULT_MAX_AGE_MS,
   ): WeightSnapshot | null {
+    return this.findLatest(
+      preferredGatewayId,
+      (snapshot) => this.isUsable(snapshot, maxAgeMs),
+    );
+  }
+
+  getFreshStable(
+    preferredGatewayId?: string | null,
+    maxAgeMs = DEFAULT_MAX_AGE_MS,
+  ): WeightSnapshot | null {
+    return this.findLatest(
+      preferredGatewayId,
+      (snapshot) => this.isFreshStable(snapshot, maxAgeMs),
+    );
+  }
+
+  private findLatest(
+    preferredGatewayId: string | null | undefined,
+    predicate: (snapshot: WeightSnapshot | undefined) => boolean,
+  ): WeightSnapshot | null {
     if (preferredGatewayId) {
       const preferred = this.snapshots.get(preferredGatewayId);
-      return this.isUsable(preferred, maxAgeMs) ? preferred! : null;
+      return predicate(preferred) ? preferred! : null;
     }
 
-    const usable = [...this.snapshots.values()].filter((s) =>
-      this.isUsable(s, maxAgeMs),
+    const matching = [...this.snapshots.values()].filter((snapshot) =>
+      predicate(snapshot),
     );
-    if (usable.length === 0) {
+    if (matching.length === 0) {
       return null;
     }
-    usable.sort((a, b) => b.ts - a.ts);
-    return usable[0];
+    matching.sort((a, b) => b.ts - a.ts);
+    return matching[0];
   }
 
   private isUsable(
+    snapshot: WeightSnapshot | undefined,
+    maxAgeMs: number,
+  ): boolean {
+    return this.isFreshStable(snapshot, maxAgeMs) && snapshot!.weight > 0;
+  }
+
+  private isFreshStable(
     snapshot: WeightSnapshot | undefined,
     maxAgeMs: number,
   ): boolean {
@@ -56,9 +83,6 @@ export class WeightSnapshotStore {
       return false;
     }
     if (!snapshot.stable) {
-      return false;
-    }
-    if (!(snapshot.weight > 0)) {
       return false;
     }
     return Date.now() - snapshot.ts <= maxAgeMs;
