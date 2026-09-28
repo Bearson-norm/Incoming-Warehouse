@@ -41,9 +41,17 @@ fi
 echo "[seed] Generating Prisma client from current schema (vendorId, prodArea)..."
 (cd "$API" && npx prisma generate)
 
-echo "[seed] Running import inside Docker network (host API tree mounted over /app)..."
+WS_NODE="$ROOT/node_modules"
+if [[ ! -d "$WS_NODE/@prisma/client" ]]; then
+  echo "Prisma client not found at $WS_NODE/@prisma/client — run: (cd $API && npm run install:vps-api-only && npx prisma generate)"
+  exit 1
+fi
+
+echo "[seed] Running import inside Docker network..."
+echo "[seed] API code: $API | workspace node_modules: $WS_NODE"
 docker compose run --rm --no-deps \
   -e DATABASE_URL \
   -v "$API:/app:ro" \
+  -v "$WS_NODE:/app/node_modules:ro" \
   --entrypoint node \
   api /app/dist-scripts/scripts/import-products-csv.js

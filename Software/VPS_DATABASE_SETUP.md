@@ -252,7 +252,7 @@ Software/infra/scripts/seed-products-mount.sh
 
 Jika `docker compose build api` gagal **lookup registry-1.docker.io / i/o timeout**, itu masalah DNS/jaringan VPS ke Docker Hub — coba lagi nanti atau perbaiki DNS (`/etc/resolv.conf`). Seed mount **tidak** butuh build/pull image baru.
 
-Script ini menjalankan `npm run install:vps-api-only` + `build:scripts` + `prisma generate` di `Dashboard/api`, lalu import lewat jaringan Docker dengan **Prisma Client dari host** (image API lama tidak mengenal `vendorId` pada `RmCode`).
+Script ini menjalankan `npm run install:vps-api-only` + `build:scripts` + `prisma generate` di `Dashboard/api`, lalu import lewat jaringan Docker. **`prisma generate` menulis ke `Software/node_modules`** (npm workspace); script mem-mount folder itu ke `/app/node_modules` di container.
 
 Setelah seed berhasil, **rebuild image API** saat disk cukup — container yang masih lama tidak bisa memakai relasi vendor–RM di runtime sampai di-build ulang dari kode terbaru.
 
