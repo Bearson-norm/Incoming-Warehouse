@@ -242,10 +242,15 @@ Pakai image API yang **sudah jalan**, mount CSV + script dari `git`:
 
 ```bash
 cd /opt/Incoming-Warehouse
+# Jika git pull gagal karena file script diedit di server:
+git checkout -- Software/infra/scripts/seed-products-mount.sh
 git pull
+
 chmod +x Software/infra/scripts/seed-products-mount.sh
 Software/infra/scripts/seed-products-mount.sh
 ```
+
+Jika `docker compose build api` gagal **lookup registry-1.docker.io / i/o timeout**, itu masalah DNS/jaringan VPS ke Docker Hub — coba lagi nanti atau perbaiki DNS (`/etc/resolv.conf`). Seed mount **tidak** butuh build/pull image baru.
 
 Script ini menjalankan `npm run install:vps-api-only` + `build:scripts` + `prisma generate` di `Dashboard/api`, lalu import lewat jaringan Docker dengan **Prisma Client dari host** (image API lama tidak mengenal `vendorId` pada `RmCode`).
 

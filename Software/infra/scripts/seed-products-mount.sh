@@ -41,13 +41,9 @@ fi
 echo "[seed] Generating Prisma client from current schema (vendorId, prodArea)..."
 (cd "$API" && npx prisma generate)
 
-echo "[seed] Running import inside Docker network..."
-echo "[seed] Mounting host Prisma client — required if API image was built before RM schema change."
+echo "[seed] Running import inside Docker network (host API tree mounted over /app)..."
 docker compose run --rm --no-deps \
   -e DATABASE_URL \
-  -v "$API/data:/app/data:ro" \
-  -v "$API/dist-scripts:/app/dist-scripts:ro" \
-  -v "$API/node_modules/@prisma:/app/node_modules/@prisma:ro" \
-  -v "$API/node_modules/.prisma:/app/node_modules/.prisma:ro" \
+  -v "$API:/app:ro" \
   --entrypoint node \
   api /app/dist-scripts/scripts/import-products-csv.js
