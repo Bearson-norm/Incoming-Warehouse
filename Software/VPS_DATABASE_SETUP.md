@@ -176,6 +176,24 @@ docker-compose exec api npx prisma migrate deploy
 docker-compose exec api npm run prisma:seed
 ```
 
+**Di VPS (tanpa Docker):** jalankan sebagai user deploy (`foom`), **jangan** `sudo npm run` — `sudo` sering membuat `prisma: not found` karena PATH/`node_modules` berbeda.
+
+```bash
+cd /opt/Incoming-Warehouse/Software
+npm install
+cd Dashboard/api
+export DATABASE_URL="postgresql://admin:PASSWORD@localhost:5432/wis_foom?schema=public"
+npm run prisma:migrate:deploy
+npm run seed:products   # butuh devDependency ts-node; pastikan `npm install` dari root Software (bukan `npm ci --omit=dev`)
+```
+
+Jika masih `prisma: not found`, pakai langsung:
+
+```bash
+cd /opt/Incoming-Warehouse/Software/Dashboard/api
+npx prisma migrate deploy
+```
+
 ---
 
 ## Local Device → VPS Database Connection

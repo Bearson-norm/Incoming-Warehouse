@@ -104,6 +104,11 @@ export class SessionsService {
       if (!rm) {
         throw new BadRequestException('RM code not found');
       }
+      if (rm.vendorId != null && rm.vendorId !== vendorId) {
+        throw new BadRequestException(
+          'RM code does not belong to the selected vendor',
+        );
+      }
     }
 
     await this.prisma.weighSession.updateMany({

@@ -46,6 +46,11 @@ export class CreateCloudMasterDataDto {
   @IsOptional()
   @IsDateString()
   issuedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  prodArea?: string;
 }
 
 export class UpdateCloudMasterDataDto {
@@ -83,6 +88,11 @@ export class UpdateCloudMasterDataDto {
   @IsOptional()
   @IsDateString()
   issuedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  prodArea?: string;
 }
 
 export class DeleteCloudMasterDataDto {

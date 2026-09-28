@@ -9,6 +9,8 @@ build/
 *.tsbuildinfo
 Software/release/
 Software/electron-app/staging/
+Software/release-fresh/
+Software/release-fresh.zip
 Software/electron-app/node-runtime/
 Software/electron-app/electron-builder.temp.json
 

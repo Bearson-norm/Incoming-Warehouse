@@ -85,7 +85,10 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
         where: { updatedAt },
         include: { vendor: { select: { cloudId: true } } },
       }),
-      this.prisma.rmCode.findMany({ where: { updatedAt } }),
+      this.prisma.rmCode.findMany({
+        where: { updatedAt },
+        include: { vendor: { select: { cloudId: true } } },
+      }),
     ]);
     return {
       vendors,
@@ -93,7 +96,10 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
         ...packaging,
         vendorCloudId: vendor.cloudId,
       })),
-      rmCodes,
+      rmCodes: rmCodes.map(({ vendor, ...rm }) => ({
+        ...rm,
+        vendorCloudId: vendor?.cloudId ?? null,
+      })),
       cursor: watermark.toISOString(),
       generatedAt: watermark.toISOString(),
     };
@@ -132,10 +138,24 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
           },
         });
       } else {
+        let vendorId: number | null = null;
+        if (dto.vendorCloudId?.trim()) {
+          const vendor = await tx.vendor.findFirst({
+            where: {
+              cloudId: dto.vendorCloudId.trim(),
+              deletedAt: null,
+            },
+          });
+          if (!vendor)
+            throw new BadRequestException('Vendor not found or inactive');
+          vendorId = vendor.id;
+        }
         created = await tx.rmCode.create({
           data: {
             code: this.required(dto.code, 'RM code'),
             name: dto.name?.trim() || null,
+            vendorId,
+            prodArea: dto.prodArea?.trim() || null,
             issuedAt: dto.issuedAt ? new Date(dto.issuedAt) : new Date(),
           },
         });
@@ -357,12 +377,21 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
         });
       }
       for (const rm of snapshot.rmCodes) {
+        let vendorId: number | null = null;
+        if (rm.vendorCloudId) {
+          const vendor = await tx.vendor.findUnique({
+            where: { cloudId: rm.vendorCloudId },
+          });
+          if (vendor) vendorId = vendor.id;
+        }
         await tx.rmCode.upsert({
           where: { cloudId: rm.cloudId },
           create: {
             cloudId: rm.cloudId,
             code: rm.code,
             name: rm.name,
+            vendorId,
+            prodArea: rm.prodArea ?? null,
             issuedAt: new Date(rm.issuedAt),
             revision: rm.revision,
             deletedAt: rm.deletedAt ? new Date(rm.deletedAt) : null,
@@ -372,6 +401,8 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
           update: {
             code: rm.code,
             name: rm.name,
+            vendorId,
+            prodArea: rm.prodArea ?? null,
             issuedAt: new Date(rm.issuedAt),
             revision: rm.revision,
             deletedAt: rm.deletedAt ? new Date(rm.deletedAt) : null,
@@ -432,7 +463,7 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
       }
       return data;
     }
-    return {
+    const data: Record<string, unknown> = {
       ...(dto.code !== undefined
         ? { code: this.required(dto.code, 'RM code') }
         : {}),
@@ -440,7 +471,19 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
       ...(dto.issuedAt !== undefined
         ? { issuedAt: new Date(dto.issuedAt) }
         : {}),
+      ...(dto.prodArea !== undefined
+        ? { prodArea: dto.prodArea?.trim() || null }
+        : {}),
     };
+    if (dto.vendorCloudId) {
+      const vendor = await tx.vendor.findFirst({
+        where: { cloudId: dto.vendorCloudId, deletedAt: null },
+      });
+      if (!vendor)
+        throw new BadRequestException('Vendor not found or inactive');
+      data.vendorId = vendor.id;
+    }
+    return data;
   }
 
   private async appendAudit(

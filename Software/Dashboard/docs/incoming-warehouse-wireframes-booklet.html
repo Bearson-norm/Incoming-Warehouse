@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Incoming Warehouse — Panduan Layar &amp; Wireframe (PDF)</title>
+  <style>
+    :root {
+      --shell: #efebe9;
+      --page: #f5ebe0;
+      --card: #fff8f0;
+      --border: #d7ccc8;
+      --brand: #6d4c41;
+      --primary: #5d4037;
+      --secondary: #8d6e63;
+      --text: #3e2723;
+      --sub: #8d6e63;
+      --pass: #15803d;
+      --confirm: #16a34a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      color: var(--text);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    @page { size: A4; margin: 14mm 12mm; }
+    h1 { font-size: 22pt; margin: 0 0 8px; color: var(--primary); }
+    h2 { font-size: 14pt; margin: 18px 0 8px; color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 4px; }
+    h3 { font-size: 11pt; margin: 12px 0 6px; color: var(--label, #5d4037); }
+    p { margin: 0 0 8px; }
+    .muted { color: var(--sub); font-size: 9.5pt; }
+    .page { page-break-after: always; }
+    .page:last-child { page-break-after: auto; }
+    .cover {
+      min-height: 250mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      background: linear-gradient(160deg, var(--page) 0%, #e8d5c4 100%);
+      padding: 24mm;
+    }
+    .cover .logo {
+      width: 72px; height: 72px; border-radius: 16px;
+      background: var(--brand); color: #fff;
+      font-size: 28pt; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 20px;
+    }
+    .cover h1 { font-size: 26pt; }
+    .cover .tag { font-size: 12pt; color: var(--secondary); margin-top: 8px; }
+    .cover .meta { margin-top: 40px; font-size: 10pt; color: var(--sub); }
+    table.data { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 8px 0 12px; }
+    table.data th, table.data td { border: 1px solid var(--border); padding: 5px 7px; text-align: left; vertical-align: top; }
+    table.data th { background: var(--page); font-weight: 600; }
+    table.data tr:nth-child(even) td { background: #faf6f2; }
+    .callout {
+      border-left: 4px solid var(--brand);
+      background: var(--card);
+      padding: 8px 12px;
+      margin: 10px 0;
+      font-size: 9.5pt;
+    }
+    .callout strong { display: block; margin-bottom: 4px; }
+    ol.flow { margin: 8px 0; padding-left: 20px; font-size: 9.5pt; }
+    ol.flow li { margin-bottom: 6px; }
+    ol.flow strong { color: var(--primary); }
+    .stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+    .stat {
+      flex: 1 1 100px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+    .stat .v { font-size: 16pt; font-weight: 700; color: var(--brand); }
+    .stat .l { font-size: 8.5pt; color: var(--sub); }
+    .palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 8.5pt; }
+    .swatch { display: flex; align-items: center; gap: 8px; }
+    .swatch i { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0; }
+    .arch { width: 100%; max-width: 100%; height: auto; margin: 10px 0; }
+    /* Wireframe shell */
+    .wf {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      min-height: 200px;
+      background: var(--shell);
+      font-size: 8pt;
+      margin: 10px 0;
+    }
+    .wf-side {
+      width: 130px;
+      flex-shrink: 0;
+      background: var(--card);
+      border-right: 1px solid var(--border);
+      padding: 8px 6px;
+    }
+    .wf-side .brand { font-weight: 700; font-size: 8pt; }
+    .wf-side .sub { font-size: 7pt; color: var(--sub); }
+    .wf-nav { margin-top: 8px; }
+    .wf-nav div {
+      padding: 4px 6px; border-radius: 6px; margin-bottom: 2px;
+      font-size: 7.5pt; color: var(--sub);
+    }
+    .wf-nav div.on {
+      background: var(--page); border: 1px solid var(--border);
+      font-weight: 600; color: var(--primary);
+    }
+    .wf-main { flex: 1; background: var(--page); padding: 10px; min-width: 0; }
+    .wf-title { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .wf-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--brand); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 9pt;
+    }
+    .wf-h { font-weight: 700; font-size: 11pt; }
+    .card {
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .card.bar { border-top: 4px solid var(--brand); }
+    .btn {
+      display: inline-block;
+      background: var(--brand);
+      color: #fff;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 8pt;
+      font-weight: 600;
+    }
+    .btn.outline { background: #fff; color: var(--sub); border: 1px solid var(--accent, #bcaaa4); }
+    .btn.green { background: var(--confirm); }
+    .field { margin-bottom: 6px; }
+    .field label { display: block; font-size: 7pt; color: var(--primary); margin-bottom: 2px; }
+    .field input, .field .inp {
+      height: 22px; border: 1px solid var(--border); border-radius: 6px;
+      background: #fff; padding: 0 6px; font-size: 7.5pt; width: 100%;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .badge {
+      display: inline-block; font-size: 7pt; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px;
+      background: #dcfce7; color: var(--pass);
+    }
+    .badge.warn { background: #fef9c3; color: #a16207; }
+    .result-pass {
+      border: 2px solid #86efac; background: #f0fdf4;
+      border-radius: 10px; padding: 8px; margin-bottom: 8px; font-size: 8pt;
+    }
+    .mono { font-family: Consolas, monospace; font-size: 7.5pt; }
+    .toc a { color: var(--brand); text-decoration: none; }
+    .toc li { margin-bottom: 4px; }
+    .two-col { display: grid; grid-template-columns: 36% 1fr; gap: 10px; }
+    .wait-box {
+      min-height: 120px; background: #fff; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; color: #6b7280; font-size: 8pt; text-align: center;
+    }
+    .scale-num {
+      font-family: Consolas, monospace; font-size: 20pt; text-align: center;
+      background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 10px; padding: 12px;
+    }
+    footer.doc-foot {
+      margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--border);
+      font-size: 8pt; color: var(--sub); text-align: center;
+    }
+    .user-ctx {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 12px;
+    }
+    .user-ctx .box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; font-size: 9pt;
+    }
+    .user-ctx .box strong { display: block; color: var(--primary); margin-bottom: 4px; font-size: 9.5pt; }
+    .page-sub { font-size: 10pt; color: var(--sub); margin: -4px 0 12px; }
+  </style>
+</head>
+<body>
+
+<section class="page cover">
+  <div class="logo">W</div>
+  <h1>Incoming Warehouse</h1>
+  <p class="tag">Panduan layar &amp; wireframe — untuk operator gudang</p>
+  <p class="muted" style="max-width: 440px; margin-top: 16px;">
+    Bukulet berisi tampilan setiap menu, langkah kerja harian, arti tombol dan status,
+    serta tips praktis. Ditulis untuk operator, supervisor, dan admin — bukan dokumentasi teknis.
+  </p>
+  <p class="meta">
+    Versi aplikasi 1.0.0 · Dashboard web / Electron<br />
+    Selaras dengan canvas wireframe · September 2026
+  </p>
+</section>
+
+<section class="page">
+  <h1>Daftar isi</h1>
+  <ol class="toc" style="font-size: 11pt; line-height: 1.8;">
+    <li><a href="#overview">1. Peta sistem &amp; arsitektur</a></li>
+    <li><a href="#login">2. Login</a></li>
+    <li><a href="#shell">3. App shell (sidebar)</a></li>
+    <li><a href="#home">4. Beranda (Dashboard)</a></li>
+    <li><a href="#incoming">5. Incoming — penimbangan barang masuk</a></li>
+    <li><a href="#intrans">6. Intrans — penimbangan transfer</a></li>
+    <li><a href="#lpn">7. Rincian LPN</a></li>
+    <li><a href="#documents">8. Dokumen Rekaman</a></li>
+    <li><a href="#cloud">9. Cloud Server</a></li>
+    <li><a href="#database">10. Database (master data)</a></li>
+    <li><a href="#setting">11. Pengaturan</a></li>
+  </ol>
+  <h2>Tema visual</h2>
+  <div class="palette">
+    <div class="swatch"><i style="background:#f5ebe0"></i><span><strong>Latar halaman</strong> #f5ebe0</span></div>
+    <div class="swatch"><i style="background:#fff8f0"></i><span><strong>Kartu / sidebar</strong> #fff8f0</span></div>
+    <div class="swatch"><i style="background:#6d4c41"></i><span><strong>Brand / tombol</strong> #6d4c41</span></div>
+    <div class="swatch"><i style="background:#d7ccc8"></i><span><strong>Border</strong> #d7ccc8</span></div>
+    <div class="swatch"><i style="background:#3e2723"></i><span><strong>Teks utama</strong> #3e2723</span></div>
+    <div class="swatch"><i style="background:#8d6e63"></i><span><strong>Teks sekunder</strong> #8d6e63</span></div>
+  </div>
+  <p class="muted">Kartu memakai border 2px, sudut 12px, strip brand di atas. Tombol utama cokelat; konfirmasi timbang hijau.</p>
+</section>
+
+<section class="page" id="overview">
+  <h1>1. Pengenalan</h1>
+  <p>Incoming Warehouse membantu tim gudang mencatat berat barang masuk dengan timbangan digital. Anda memindai nomor LPN di palet, menunggu angka stabil, lalu menyimpan hasil ke sistem gudang (Odoo) atau menyimpannya sementara di komputer stasiun jika Odoo belum siap.</p>
+  <div class="stats">
+    <div class="stat"><div class="v">8</div><div class="l">Menu sidebar</div></div>
+    <div class="stat"><div class="v">2</div><div class="l">Jenis timbang</div></div>
+    <div class="stat"><div class="v">2</div><div class="l">Metode catat</div></div>
+    <div class="stat"><div class="v">1</div><div class="l">LPN per sesi</div></div>
+  </div>
+  <h2>Peran di gudang</h2>
+  <table class="data">
+    <thead><tr><th>Peran</th><th>Menu utama</th><th>Tugas</th></tr></thead>
+    <tbody>
+      <tr><td>Operator lantai</td><td>Incoming, Intrans</td><td>Timbang setiap palet; pastikan LPN benar &amp; berat stabil</td></tr>
+      <tr><td>Supervisor / QC</td><td>Beranda, Dokumen, Rincian LPN</td><td>Cek volume, cari riwayat, cetak label, lengkapi data</td></tr>
+      <tr><td>Admin / teknisi</td><td>Pengaturan, Cloud, Database</td><td>Sambung timbangan, cloud, Odoo; kelola master data</td></tr>
+    </tbody>
+  </table>
+  <h2>Istilah penting</h2>
+  <table class="data">
+    <thead><tr><th>Istilah</th><th>Arti</th></tr></thead>
+    <tbody>
+      <tr><td>LPN</td><td>Nomor identitas palet (biasanya dari barcode)</td></tr>
+      <tr><td>Gross / Tare / Netto</td><td>Berat kotor / kemasan kosong / isi bersih</td></tr>
+      <tr><td>Stabil</td><td>Angka timbangan sudah tenang — wajib sebelum simpan</td></tr>
+      <tr><td>PASS / FAIL</td><td>Odoo menerima atau menolak berat</td></tr>
+      <tr><td>Internal</td><td>Simpan di PC dulu; kirim Odoo belakangan</td></tr>
+      <tr><td>Incoming / Intrans</td><td>Barang masuk supplier / transfer dalam gudang</td></tr>
+    </tbody>
+  </table>
+  <h2>Alur besar (tanpa istilah teknis)</h2>
+  <p class="muted">Timbangan fisik mengirim angka ke komputer stasiun → layar menampilkan berat hidup → Anda konfirmasi → sistem menyimpan dan (jika metode Odoo) memberi tahu gudang pusat. Data juga bisa disalin ke server cloud agar supervisor melihat banyak stasiun sekaligus.</p>
+  <svg class="arch" viewBox="0 0 720 118" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Alur timbangan ke cloud">
+    <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#6d4c41"/></marker></defs>
+    <g font-family="Segoe UI,sans-serif" font-size="9">
+      <rect x="4" y="38" width="88" height="44" rx="6" fill="#fff8f0" stroke="#d7ccc8"/>
+      <text x="48" y="56" text-anchor="middle" font-weight="600">Timbangan</text>
+      <text x="48" y="70" text-anchor="middle" fill="#8d6e63" font-size="8">serial / COM</text>
+      <line x1="92" y1="60" x2="108" y2="60" stroke="#6d4c41" marker-end="url(#a)"/>
+      <rect x="108" y="38" width="88" height="44" rx="6" fill="#fff8f0" stroke="#d7ccc8"/>
+      <text x="152" y="56" text-anchor="middle" font-weight="600">Gateway</text>
+      <text x="152" y="70" text-anchor="middle" fill="#8d6e63" font-size="8">jembatan ke timbangan</text>
+      <line x1="196" y1="60" x2="212" y2="60" stroke="#6d4c41" marker-end="url(#a)"/>
+      <rect x="212" y="34" width="96" height="52" rx="6" fill="#6d4c41" stroke="#5d4037"/>
+      <text x="260" y="54" text-anchor="middle" font-weight="600" fill="#fff">Komputer stasiun</text>
+      <text x="260" y="68" text-anchor="middle" fill="#f5ebe0" font-size="8">aplikasi timbang</text>
+      <line x1="308" y1="52" x2="332" y2="32" stroke="#6d4c41" marker-end="url(#a)"/>
+      <line x1="308" y1="68" x2="332" y2="88" stroke="#6d4c41" marker-end="url(#a)"/>
+      <rect x="332" y="10" width="104" height="40" rx="6" fill="#fff8f0" stroke="#d7ccc8"/>
+      <text x="384" y="28" text-anchor="middle" font-weight="600">SQLite lokal</text>
+      <text x="384" y="40" text-anchor="middle" fill="#8d6e63" font-size="8">riwayat di PC</text>
+      <rect x="332" y="66" width="104" height="40" rx="6" fill="#fff8f0" stroke="#d7ccc8"/>
+      <text x="384" y="84" text-anchor="middle" font-weight="600">Layar operator</text>
+      <text x="384" y="96" text-anchor="middle" fill="#8d6e63" font-size="8">konfirmasi &amp; hasil</text>
+      <line x1="436" y1="30" x2="468" y2="52" stroke="#6d4c41" marker-end="url(#a)"/>
+      <line x1="436" y1="86" x2="468" y2="68" stroke="#6d4c41" marker-end="url(#a)"/>
+      <rect x="468" y="38" width="100" height="44" rx="6" fill="#fff8f0" stroke="#d7ccc8"/>
+      <text x="518" y="56" text-anchor="middle" font-weight="600">Odoo WMS</text>
+      <text x="518" y="70" text-anchor="middle" fill="#8d6e63" font-size="8">konfirmasi gudang pusat</text>
+      <line x1="568" y1="60" x2="584" y2="60" stroke="#6d4c41" marker-end="url(#a)"/>
+      <rect x="584" y="38" width="100" height="44" rx="6" fill="#fff8f0" stroke="#d7ccc8"/>
+      <text x="634" y="56" text-anchor="middle" font-weight="600">Cloud Server</text>
+      <text x="634" y="70" text-anchor="middle" fill="#8d6e63" font-size="8">sinkron &amp; pantau</text>
+    </g>
+  </svg>
+</section>
+
+<section class="page">
+  <h1>1. Pengenalan (lanjutan)</h1>
+  <h2>Menu — untuk apa</h2>
+  <table class="data">
+    <thead><tr><th>Menu</th><th>Siapa</th><th>Anda melakukan apa</th></tr></thead>
+    <tbody>
+      <tr><td>Login</td><td>Semua</td><td>Masuk dengan akun kerja</td></tr>
+      <tr><td>Beranda</td><td>Supervisor / operator</td><td>Ringkasan timbang hari ini</td></tr>
+      <tr><td>Incoming</td><td>Operator</td><td>Timbang barang masuk — layar utama</td></tr>
+      <tr><td>Intrans</td><td>Operator</td><td>Timbang transfer internal</td></tr>
+      <tr><td>Rincian LPN</td><td>Supervisor / operator</td><td>Riwayat satu nomor palet</td></tr>
+      <tr><td>Dokumen Rekaman</td><td>Supervisor / operator</td><td>Cari, cetak, lengkapi LPN, kirim Odoo</td></tr>
+      <tr><td>Cloud Server</td><td>Supervisor / admin</td><td>Pantau pusat &amp; lacak LPN antar PC</td></tr>
+      <tr><td>Database</td><td>Semua (ubah: admin)</td><td>Daftar vendor, kemasan, kode RM</td></tr>
+      <tr><td>Pengaturan</td><td>Admin / teknisi</td><td>Bahasa, timbangan, cloud, Odoo</td></tr>
+    </tbody>
+  </table>
+  <h2>Hari kerja tipikal operator</h2>
+  <table class="data">
+    <thead><tr><th>#</th><th>Langkah</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Login — pastikan nama Anda di sidebar benar</td></tr>
+      <tr><td>2</td><td>Incoming/Intrans — per palet: timbangan → LPN → stabil → konfirmasi</td></tr>
+      <tr><td>3</td><td>Baca kartu PASS/FAIL atau Tersimpan lokal</td></tr>
+      <tr><td>4</td><td>Cetak label (Incoming) bila diperlukan</td></tr>
+      <tr><td>5</td><td>Dokumen Rekaman — lengkapi LPN/tanggal atau kirim ke Odoo</td></tr>
+      <tr><td>6</td><td>Logout saat meninggalkan stasiun</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><strong>Belum bisa login?</strong>Di aplikasi desktop, buka Settings tanpa login; minta teknisi pastikan API &amp; Gateway Running.</div>
+  <div class="callout"><strong>Satu palet, satu sesi</strong>Selesaikan satu LPN sampai kartu hasil muncul. Reset hanya sebelum Mulai Penimbangan.</div>
+</section>
+
+<section class="page" id="login">
+  <h1>2. Login</h1>
+  <div style="background:var(--page);padding:24px;border-radius:12px;text-align:center;margin:12px 0;">
+    <div class="wf-icon" style="margin:0 auto 12px;width:48px;height:48px;font-size:14pt;">W</div>
+    <div class="wf-h">Warehouse System</div>
+    <p class="muted">Incoming Weighing System</p>
+    <div class="card" style="max-width:280px;margin:16px auto;text-align:left;">
+      <div class="field"><label>Username</label><div class="inp">Enter your username</div></div>
+      <div class="field"><label>Password</label><div class="inp">••••••••</div></div>
+      <div class="btn" style="width:100%;text-align:center;margin-top:8px;">Login</div>
+    </div>
+    <p class="muted" style="font-size:8pt;">Electron: default admin / admin123 · tautan Settings</p>
+  </div>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Semua pengguna stasiun timbang.</div>
+    <div class="box"><strong>Kapan</strong>Awal shift, setelah Logout, atau saat diminta masuk lagi.</div>
+  </div>
+  <ol class="flow">
+    <li><strong>Buka aplikasi</strong> — Tunggu beberapa detik jika layar kosong.</li>
+    <li><strong>Username &amp; password</strong> — Tombol Login berubah “Logging in…” — jangan klik berulang.</li>
+    <li><strong>Berhasil</strong> — Masuk Beranda; nama Anda tampil di sidebar.</li>
+    <li><strong>Lanjut</strong> — Buka Incoming atau Intrans untuk mulai timbang.</li>
+  </ol>
+  <h3>Jika login gagal</h3>
+  <table class="data">
+    <thead><tr><th>Pesan</th><th>Yang bisa dilakukan</th></tr></thead>
+    <tbody>
+      <tr><td>Username/password salah</td><td>Cek ejaan; minta reset ke supervisor</td></tr>
+      <tr><td>Cannot connect to API</td><td>Tunggu; buka Settings (desktop); minta IT restart API</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="page" id="shell">
+  <h1>3. App shell</h1>
+  <div class="wf" style="min-height:220px;">
+    <div class="wf-side">
+      <div class="brand">Warehouse</div>
+      <div class="sub">Incoming System</div>
+      <div class="wf-nav">
+        <div class="on">Beranda</div>
+        <div>Incoming</div>
+        <div>Intrans</div>
+        <div>Rincian LPN</div>
+        <div>Dokumen Rekaman</div>
+        <div>Cloud Server</div>
+        <div>Database</div>
+        <div>Pengaturan</div>
+      </div>
+    </div>
+    <div class="wf-main">
+      <div class="wf-title"><div class="wf-icon">B</div><div><div class="wf-h">Judul halaman</div><div class="muted">Subjudul</div></div></div>
+      <div class="wait-box" style="min-height:140px;">Outlet: konten halaman aktif</div>
+    </div>
+  </div>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Semua setelah login.</div>
+    <div class="box"><strong>Kapan</strong>Pindah tugas (timbang → cari riwayat → pengaturan).</div>
+  </div>
+  <table class="data">
+    <thead><tr><th>Menu</th><th>Kapan dibuka</th></tr></thead>
+    <tbody>
+      <tr><td>Incoming</td><td>Hampir setiap palet barang masuk</td></tr>
+      <tr><td>Intrans</td><td>Transfer internal dalam gudang</td></tr>
+      <tr><td>Dokumen Rekaman</td><td>Cari riwayat, cetak, lengkapi LPN</td></tr>
+      <tr><td>Keluar</td><td>Akhir shift — wajib</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><strong>Tips</strong>Jangan keluar menu Incoming di tengah sesi timbang — selesaikan atau Reset dulu.</div>
+</section>
+
+<section class="page" id="home">
+  <h1>4. Beranda</h1>
+  <div class="wf">
+    <div class="wf-side"><div class="brand">Warehouse</div><div class="wf-nav"><div class="on">Beranda</div><div>Incoming</div></div></div>
+    <div class="wf-main">
+      <div class="wf-title"><div class="wf-icon">B</div><div><div class="wf-h">Dashboard</div><div class="muted">Hasil Penimbangan</div></div></div>
+      <div class="field" style="max-width:140px"><label>Pilih Periode Waktu</label><div class="inp">Hari Ini ▾</div></div>
+      <div class="grid3">
+        <div class="card bar"><div class="muted">Total Rekaman</div><div style="font-size:14pt;font-weight:700">24</div></div>
+        <div class="card bar"><div class="muted">Total Berat</div><div style="font-size:14pt;font-weight:700">18420 g</div></div>
+        <div class="card bar"><div class="muted">Berdasarkan Vendor</div><div style="font-size:14pt;font-weight:700">3</div></div>
+      </div>
+      <div class="grid2" style="margin-top:8px">
+        <div class="card bar"><div class="muted">Vendor — Berat (g)</div><div style="height:50px;background:linear-gradient(to top,#8d6e63 70%,transparent);margin-top:6px;border-radius:4px;"></div></div>
+        <div class="card bar"><div class="muted">Vendor — Total Rekaman</div><div style="width:50px;height:50px;border-radius:50%;border:10px solid #8d6e63;margin:8px auto;"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Supervisor &amp; operator yang cek capaian.</div>
+    <div class="box"><strong>Kapan</strong>“Sudah berapa palet hari ini?” — tidak untuk menimbang ulang.</div>
+  </div>
+  <ol class="flow">
+    <li>Pilih <strong>Hari Ini / Minggu / Bulan</strong></li>
+    <li><strong>Total Rekaman</strong> = berapa kali timbang selesai</li>
+    <li><strong>Total Berat</strong> = jumlah netto (gram)</li>
+    <li>Grafik = vendor mana paling berat / paling sering</li>
+  </ol>
+  <p class="muted">Halaman ini hanya menampilkan angka — tidak bisa mengubah data timbang.</p>
+</section>
+
+<section class="page" id="incoming">
+  <h1>5. Incoming</h1>
+  <p class="muted">Pilih Odoo atau Internal, timbang barang masuk · flowType: incoming</p>
+  <div class="wf" style="min-height:280px;">
+    <div class="wf-side"><div class="brand">Warehouse</div><div class="wf-nav"><div>Beranda</div><div class="on">Incoming</div></div></div>
+    <div class="wf-main">
+      <div class="result-pass"><strong>LULUS (PASS)</strong> — RM-BOM-31/05/2026-000011 · Gross 12.45 · Net 11.65 kg · Terkirim ke Odoo</div>
+      <div class="two-col">
+        <div class="card">
+          <strong>Metode</strong>
+          <div class="field"><label>Pilih Timbangan</label><div class="inp">Scale A-01 ▾</div></div>
+          <div class="grid2" style="margin:6px 0"><div class="btn">Odoo</div><div class="btn outline">Internal</div></div>
+          <div class="field"><label>LPN</label><div class="inp mono">RM-BOM-…</div></div>
+          <div class="field"><label>Tanggal Incoming</label><div class="inp">24/09/2026</div></div>
+          <div class="btn" style="width:100%;text-align:center;margin-top:4px;">Konfirmasi</div>
+        </div>
+        <div>
+          <div class="card"><span class="mono" style="font-weight:700">RM-BOM-31/05/2026-000011</span><br/><span class="muted">Tare/netto dari Odoo setelah konfirmasi</span></div>
+          <div class="card bar">
+            <div style="display:flex;justify-content:space-between"><strong>Berat Saat Ini</strong><span class="badge">Stabil</span></div>
+            <div class="scale-num">12.450 <span style="font-size:10pt;color:#9ca3af">kg</span></div>
+            <div class="btn green" style="width:100%;text-align:center;margin-top:8px;">Konfirmasi Penimbangan</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Operator dock penerimaan.</div>
+    <div class="box"><strong>Kapan</strong>Setiap palet baru dari supplier.</div>
+  </div>
+  <h2>Odoo vs Internal</h2>
+  <table class="data">
+    <thead><tr><th></th><th>Odoo</th><th>Internal</th></tr></thead>
+    <tbody>
+      <tr><td>LPN</td><td>Wajib</td><td>Boleh kosong dulu; wajib sebelum cetak/kirim Odoo</td></tr>
+      <tr><td>Vendor/kemasan</td><td>Tidak perlu pilih</td><td>Wajib pilih (tare dari kemasan)</td></tr>
+      <tr><td>Hasil</td><td>PASS/FAIL langsung</td><td>Tersimpan lokal + Kirim ke Odoo</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="page">
+  <h1>5. Incoming — langkah &amp; tombol</h1>
+  <ol class="flow">
+    <li><strong>Pilih timbangan</strong> — Harus sama dengan meja Anda. Cloud offline → panggil IT.</li>
+    <li><strong>Pilih Odoo / Internal</strong> — Tidak bisa diubah setelah Konfirmasi.</li>
+    <li><strong>Scan LPN</strong> — Metode Internal: pilih vendor, kemasan, kode RM.</li>
+    <li><strong>Konfirmasi</strong> — Form kiri terkunci; panel kanan tampil.</li>
+    <li><strong>Tunggu badge Stabil</strong> (hijau) — jangan konfirmasi saat kuning.</li>
+    <li><strong>Mulai Penimbangan</strong> — Setelah ini Reset tidak tersedia.</li>
+    <li><strong>Konfirmasi Penimbangan / Simpan Berat</strong> — tombol hijau.</li>
+    <li><strong>Kartu hasil</strong> — PASS hijau / FAIL merah / lokal krem; Cetak atau Kirim ke Odoo.</li>
+  </ol>
+  <h3>Arti kartu hasil</h3>
+  <table class="data">
+    <thead><tr><th>Tampilan</th><th>Artinya</th><th>Tindakan</th></tr></thead>
+    <tbody>
+      <tr><td>Lulus (PASS)</td><td>Odoo menerima</td><td>Lanjut proses gudang; cetak label</td></tr>
+      <tr><td>Gagal (FAIL)</td><td>Di luar toleransi</td><td>Cek isi palet; hubungi supervisor</td></tr>
+      <tr><td>Tersimpan lokal</td><td>Belum ke Odoo</td><td>Lengkapi LPN; Kirim ke Odoo</td></tr>
+    </tbody>
+  </table>
+  <table class="data">
+    <thead><tr><th>Tombol / field</th><th>Artinya</th><th>Tips</th></tr></thead>
+    <tbody>
+      <tr><td>Stabil / Tidak stabil</td><td>Boleh simpan?</td><td>Tunggu hijau</td></tr>
+      <tr><td>Reset</td><td>Batalkan palet</td><td>Hanya sebelum Mulai Penimbangan</td></tr>
+      <tr><td>Cetak</td><td>Label fisik</td><td>LPN &amp; tanggal harus lengkap</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="page" id="intrans">
+  <h1>6. Intrans</h1>
+  <p class="muted">Hanya LPN + timbangan + metode · tanpa vendor/kemasan/tanggal/cetak</p>
+  <div class="wf">
+    <div class="wf-side"><div class="wf-nav"><div class="on">Intrans</div></div></div>
+    <div class="wf-main">
+      <div class="two-col">
+        <div class="card">
+          <div class="field"><label>Pilih Timbangan</label><div class="inp">Scale A-01 ▾</div></div>
+          <div class="grid2"><div class="btn">Odoo</div><div class="btn outline">Internal</div></div>
+          <div class="field"><label>LPN (wajib)</label><div class="inp mono">RM-BOM-…</div></div>
+          <div class="btn" style="width:100%;text-align:center">Konfirmasi</div>
+        </div>
+        <div class="wait-box">Menunggu konfigurasi<br/><span class="muted">Isi LPN lalu konfirmasi</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Operator transfer internal.</div>
+    <div class="box"><strong>Kapan</strong>Palet pindah area — bukan penerimaan supplier baru.</div>
+  </div>
+  <ol class="flow">
+    <li>Gunakan menu <strong>Intrans</strong>, bukan Incoming</li>
+    <li>LPN <strong>wajib</strong> untuk semua metode</li>
+    <li>Tidak ada cetak label di halaman ini</li>
+    <li>Alur timbang sama: Stabil → Mulai → konfirmasi hijau</li>
+  </ol>
+</section>
+
+<section class="page" id="lpn">
+  <h1>7. Rincian LPN</h1>
+  <div class="card">
+    <strong>Cari LPN</strong>
+    <div class="field"><div class="inp mono">RM-BOM-31/05/2026-000011</div></div>
+    <div class="btn">Cari</div>
+  </div>
+  <div class="card">
+    <div class="mono" style="font-weight:700;margin-bottom:8px">RM-BOM-31/05/2026-000011</div>
+    <div class="grid2">
+      <div>Kode RM: RM-0142</div><div>Vendor: PT Sinar Pangan</div>
+      <div>Net/Tare: 11.65 / 0.8 kg</div><div>Status: PASS · Terkirim ke Odoo</div>
+    </div>
+  </div>
+  <table class="data">
+    <thead><tr><th>Tanggal</th><th>Alur</th><th>Metode</th><th>Netto</th><th>Odoo</th></tr></thead>
+    <tbody>
+      <tr><td>24/09 09:14</td><td>Incoming</td><td>Odoo</td><td>11.65</td><td>Terkirim</td></tr>
+      <tr><td>24/09 08:57</td><td>Incoming</td><td>Internal</td><td>11.60</td><td>Lokal</td></tr>
+      <tr><td>23/09 16:02</td><td>Intrans</td><td>Odoo</td><td>11.50</td><td>Terkirim</td></tr>
+    </tbody>
+  </table>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Supervisor, QC, operator saat audit.</div>
+    <div class="box"><strong>Kapan</strong>Selisih berat dengan Odoo atau palet ditimbang ulang.</div>
+  </div>
+  <ol class="flow">
+    <li>Ketik/scan LPN → <strong>Cari</strong></li>
+    <li>Baca ringkasan: RM, vendor, netto/tare, Terkirim ke Odoo atau Lokal</li>
+    <li>Tabel: setiap baris = satu kali timbang (Incoming/Intrans)</li>
+    <li>Dari Dokumen Rekaman: tombol <strong>L</strong> membuka halaman ini</li>
+  </ol>
+</section>
+
+<section class="page" id="documents">
+  <h1>8. Dokumen Rekaman</h1>
+  <div class="card">
+    <div class="grid3">
+      <div class="field"><label>LPN</label><div class="inp"></div></div>
+      <div class="field"><label>Tanggal</label><div class="inp"></div></div>
+      <div class="field"><label>Alur</label><div class="inp">Semua alur ▾</div></div>
+    </div>
+    <div class="btn">Cari</div>
+  </div>
+  <table class="data" style="font-size:7.5pt">
+    <thead><tr><th>Tanggal</th><th>Alur</th><th>Metode</th><th>LPN</th><th>Status</th><th>Odoo</th><th>Aksi</th></tr></thead>
+    <tbody>
+      <tr><td>24/09</td><td>Incoming</td><td>Odoo</td><td class="mono">…011</td><td>PASS</td><td>Terkirim</td><td>E · P · L</td></tr>
+      <tr><td>24/09</td><td>Incoming</td><td>Internal</td><td>—</td><td>LOCAL</td><td>Lokal</td><td>E · P · U</td></tr>
+      <tr><td>23/09</td><td>Intrans</td><td>Odoo</td><td class="mono">…009</td><td>FAIL</td><td>Terkirim</td><td>E · L</td></tr>
+    </tbody>
+  </table>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Supervisor &amp; operator pasca-timbang.</div>
+    <div class="box"><strong>Kapan</strong>Label kurang, cetak ulang, kirim hasil Internal ke Odoo.</div>
+  </div>
+  <ol class="flow">
+    <li>Filter LPN, tanggal, alur → <strong>Cari</strong></li>
+    <li><strong>E</strong> = lengkapi LPN &amp; tanggal incoming</li>
+    <li><strong>P</strong> = cetak label (Incoming saja)</li>
+    <li><strong>U</strong> = kirim ke Odoo (Internal belum terkirim)</li>
+    <li><strong>L</strong> = buka Rincian LPN</li>
+  </ol>
+</section>
+
+<section class="page" id="cloud">
+  <h1>9. Cloud Server</h1>
+  <div class="grid2">
+    <div class="card"><strong>Koneksi Cloud</strong> <span class="badge">Online</span><br/><span class="muted mono">https://cloud.example.com</span><br/>Stasiun ST-INC-01 · Antrean: 2 reading</div>
+    <div class="card"><strong>Filter</strong> — Timbangan, Username (admin), Muat ulang, Ulangi sinkronisasi</div>
+  </div>
+  <div class="card"><strong>Tracing LPN lintas perangkat</strong> — Cari tracking · Ekspor bukti audit (JSON/CSV/SHA-256)</div>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Supervisor &amp; admin IT.</div>
+    <div class="box"><strong>Kapan</strong>Cek koneksi pusat, lacak LPN antar PC, kelola nama timbangan.</div>
+  </div>
+  <ol class="flow">
+    <li>Kartu hijau = terhubung; merah = operator mungkin tidak lihat daftar timbangan</li>
+    <li>Antrean belum tersinkron → <strong>Ulangi sinkronisasi</strong></li>
+    <li><strong>Tracing LPN</strong> → siapa, stasiun mana, kapan</li>
+    <li>Admin: <strong>Kelola Timbangan</strong> (nama di dropdown Incoming)</li>
+  </ol>
+  <p class="muted">Operator biasa tidak perlu buka halaman ini setiap palet.</p>
+</section>
+
+<section class="page" id="database">
+  <h1>10. Database</h1>
+  <div class="card">Cache read-only dari Cloud Server · <strong>Sinkronkan</strong> · Sinkron terakhir + error</div>
+  <div class="grid2">
+    <div class="card"><strong>Daftar Vendor</strong> (accordion) → Kemasan + tare kg · Admin: tambah/edit/hapus</div>
+    <div class="card"><strong>Daftar Kode RM</strong> — kode, nama, tanggal terbit, revisi</div>
+  </div>
+  <div class="user-ctx">
+    <div class="box"><strong>Siapa</strong>Operator Internal (baca); admin (ubah).</div>
+    <div class="box"><strong>Kapan</strong>Dropdown vendor/kemasan kosong atau tare salah.</div>
+  </div>
+  <ol class="flow">
+    <li><strong>Sinkronkan</strong> untuk data terbaru dari cloud</li>
+    <li>Buka vendor → lihat kemasan &amp; tare (kg)</li>
+    <li>Pilihan di Incoming Internal harus sama dengan daftar ini</li>
+  </ol>
+</section>
+
+<section class="page" id="setting">
+  <h1>11. Pengaturan</h1>
+  <table class="data">
+    <thead><tr><th>Kartu</th><th>Kapan</th><th>Isi</th></tr></thead>
+    <tbody>
+      <tr><td>Bahasa</td><td>Selalu</td><td>Indonesia / English</td></tr>
+      <tr><td>SQLite (lokal)</td><td>Electron</td><td>incoming-warehouse.db, status API/Gateway, Restart, Tes folder</td></tr>
+      <tr><td>Gateway Timbangan</td><td>Electron</td><td>Port COM, baud, parity, stabil, Simpan &amp; Restart Gateway</td></tr>
+      <tr><td>Cloud Server</td><td>Login</td><td>URL VPS, Sync API Key, Tes koneksi</td></tr>
+      <tr><td>Odoo WMS API</td><td>Login</td><td>Base URL, X-FOOM-IoT-Key, Simpan Override</td></tr>
+      <tr><td>Informasi Sistem</td><td>Selalu</td><td>Versi 1.0.0, WebSocket real-time</td></tr>
+    </tbody>
+  </table>
+  <h2>Checklist sebelum shift (teknisi)</h2>
+  <table class="data">
+    <thead><tr><th>Cek</th><th>Harus</th><th>Jika tidak</th></tr></thead>
+    <tbody>
+      <tr><td>API Server</td><td>Running</td><td>Restart API</td></tr>
+      <tr><td>Gateway</td><td>Running saat timbang</td><td>Pilih port COM &amp; restart</td></tr>
+      <tr><td>Cloud</td><td>Tes koneksi OK</td><td>Perbaiki URL/internet</td></tr>
+      <tr><td>Incoming</td><td>Daftar timbangan terisi</td><td>Perbaiki cloud</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><strong>Peringatan</strong>Jangan restart Gateway saat operator sedang menimbang.</div>
+  <footer class="doc-foot">
+    Incoming Warehouse — Panduan Layar &amp; Wireframe (PDF) · Selaras dengan canvas wireframe · Pelatihan operator gudang.
+  </footer>
+</section>
+
+</body>
+</html>

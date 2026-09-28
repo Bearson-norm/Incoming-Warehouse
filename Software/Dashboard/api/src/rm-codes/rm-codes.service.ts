@@ -21,7 +21,10 @@ export class RmCodesService {
       data: {
         code: dto.code.trim(),
         name: dto.name?.trim() || null,
+        vendorId: dto.vendorId ?? null,
+        prodArea: dto.prodArea?.trim() || null,
       },
+      include: { vendor: true },
     });
   }
 
@@ -29,11 +32,15 @@ export class RmCodesService {
     return this.prisma.rmCode.findMany({
       where: { deletedAt: null },
       orderBy: { code: 'asc' },
+      include: { vendor: true },
     });
   }
 
   async findOne(id: number) {
-    const row = await this.prisma.rmCode.findUnique({ where: { id } });
+    const row = await this.prisma.rmCode.findUnique({
+      where: { id },
+      include: { vendor: true },
+    });
     if (!row) {
       throw new NotFoundException(`RM code with ID ${id} not found`);
     }
@@ -48,7 +55,12 @@ export class RmCodesService {
       data: {
         ...(dto.code != null ? { code: dto.code.trim() } : {}),
         ...(dto.name !== undefined ? { name: dto.name?.trim() || null } : {}),
+        ...(dto.vendorId !== undefined ? { vendorId: dto.vendorId } : {}),
+        ...(dto.prodArea !== undefined
+          ? { prodArea: dto.prodArea?.trim() || null }
+          : {}),
       },
+      include: { vendor: true },
     });
   }
 

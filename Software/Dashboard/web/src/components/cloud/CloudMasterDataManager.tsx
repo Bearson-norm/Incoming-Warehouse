@@ -58,6 +58,7 @@ export function CloudMasterDataManager() {
   const [vendorCloudId, setVendorCloudId] = useState("");
   const [tareWeight, setTareWeight] = useState("");
   const [issuedAt, setIssuedAt] = useState("");
+  const [prodArea, setProdArea] = useState("");
   const [reason, setReason] = useState("");
   const [history, setHistory] = useState<MasterDataAuditEvent[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -84,7 +85,11 @@ export function CloudMasterDataManager() {
     setName(row?.name || "");
     setCode(type === "rmCode" && row ? (row as RmCode).code : "");
     setVendorCloudId(
-      type === "packaging" && row ? (row as Packaging).vendorCloudId || "" : "",
+      type === "packaging" && row
+        ? (row as Packaging).vendorCloudId || ""
+        : type === "rmCode" && row
+          ? (row as RmCode).vendorCloudId || ""
+          : "",
     );
     setTareWeight(
       type === "packaging" && row
@@ -95,6 +100,9 @@ export function CloudMasterDataManager() {
       type === "rmCode" && row
         ? new Date((row as RmCode).issuedAt).toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10),
+    );
+    setProdArea(
+      type === "rmCode" && row ? (row as RmCode).prodArea || "" : "",
     );
     setReason("");
     setDialogOpen(true);
@@ -115,6 +123,8 @@ export function CloudMasterDataManager() {
     }
     if (entityType === "rmCode") {
       body.code = code.trim();
+      body.vendorCloudId = vendorCloudId || undefined;
+      body.prodArea = prodArea.trim() || undefined;
       body.issuedAt = new Date(`${issuedAt}T00:00:00`).toISOString();
     }
     try {
@@ -313,6 +323,8 @@ export function CloudMasterDataManager() {
               <TableRow>
                 <TableHead>Kode</TableHead>
                 <TableHead>Nama</TableHead>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Prod Area</TableHead>
                 <TableHead>Tanggal terbit</TableHead>
                 <TableHead>Terakhir diubah</TableHead>
                 <TableHead>Rev.</TableHead>
@@ -324,6 +336,11 @@ export function CloudMasterDataManager() {
                 <TableRow key={rm.cloudId}>
                   <TableCell className="font-mono">{rm.code}</TableCell>
                   <TableCell>{rm.name || "—"}</TableCell>
+                  <TableCell>
+                    {activeVendors.find((v) => v.cloudId === rm.vendorCloudId)
+                      ?.name || "—"}
+                  </TableCell>
+                  <TableCell>{rm.prodArea || "—"}</TableCell>
                   <TableCell>
                     {new Date(rm.issuedAt).toLocaleDateString()}
                   </TableCell>
@@ -347,7 +364,7 @@ export function CloudMasterDataManager() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {entityType === "packaging" && (
+            {(entityType === "packaging" || entityType === "rmCode") && (
               <div>
                 <Label>Vendor</Label>
                 <Select value={vendorCloudId} onValueChange={setVendorCloudId}>
@@ -392,14 +409,23 @@ export function CloudMasterDataManager() {
               </div>
             )}
             {entityType === "rmCode" && (
-              <div>
-                <Label>Tanggal terbit</Label>
-                <Input
-                  type="date"
-                  value={issuedAt}
-                  onChange={(event) => setIssuedAt(event.target.value)}
-                />
-              </div>
+              <>
+                <div>
+                  <Label>Prod Area</Label>
+                  <Input
+                    value={prodArea}
+                    onChange={(event) => setProdArea(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Tanggal terbit</Label>
+                  <Input
+                    type="date"
+                    value={issuedAt}
+                    onChange={(event) => setIssuedAt(event.target.value)}
+                  />
+                </div>
+              </>
             )}
             <div>
               <Label>{t("changeReason")}</Label>

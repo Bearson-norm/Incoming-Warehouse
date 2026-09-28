@@ -149,10 +149,15 @@ npm run prisma:migrate:dev
 
 # Seed database (membuat user admin default)
 npm run prisma:seed
+
+# Impor master data RM + vendor dari CSV (opsional, idempotent)
+npm run seed:products
+# Atau file lain: PRODUCTS_CSV=C:\path\to\products.csv npm run seed:products
 ```
 
 **Catatan:** 
 - User default: `admin` / `admin123`
+- Data RM default ada di `Dashboard/api/data/products-rm.csv`. Setelah impor di PostgreSQL (cloud), stasiun Electron sinkronkan dari halaman **Database** → **Sync**.
 - Jika migration error, pastikan PostgreSQL berjalan dan database `wis_foom` sudah dibuat
 
 ### Step 5: Build Projects (Optional untuk Development)

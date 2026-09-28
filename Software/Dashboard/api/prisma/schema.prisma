@@ -30,6 +30,7 @@ model Vendor {
   updatedAt DateTime  @updatedAt
 
   packagings    Packaging[]
+  rmCodes       RmCode[]
   weighSessions WeighSession[]
 
   @@index([updatedAt])
@@ -58,16 +59,20 @@ model Packaging {
 model RmCode {
   id        Int       @id @default(autoincrement())
   cloudId   String    @unique @default(cuid())
+  vendorId  Int?
   code      String    @unique
   name      String?
+  prodArea  String?
   issuedAt  DateTime  @default(now())
   revision  Int       @default(1)
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  vendor        Vendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   weighSessions WeighSession[]
 
+  @@index([vendorId, deletedAt])
   @@index([updatedAt])
   @@index([deletedAt])
 }

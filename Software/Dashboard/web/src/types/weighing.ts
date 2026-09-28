@@ -4,13 +4,17 @@ export type FlowType = "incoming" | "intrans";
 export interface RmCode {
   id: number;
   cloudId: string;
+  vendorId?: number | null;
+  vendorCloudId?: string | null;
   code: string;
   name?: string | null;
+  prodArea?: string | null;
   issuedAt: string;
   revision: number;
   deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  vendor?: Vendor | null;
 }
 
 export interface Vendor {

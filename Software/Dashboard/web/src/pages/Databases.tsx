@@ -456,6 +456,8 @@ export default function Databases() {
                   <TableRow>
                     <TableHead>{t("rmCode")}</TableHead>
                     <TableHead>{t("rmName")}</TableHead>
+                    <TableHead>{t("vendor")}</TableHead>
+                    <TableHead>Prod Area</TableHead>
                     <TableHead>Tanggal terbit</TableHead>
                     <TableHead>Terakhir diubah</TableHead>
                     {isAdmin && (
@@ -473,6 +475,12 @@ export default function Databases() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {row.name || "-"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {row.vendor?.name || "-"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {row.prodArea || "-"}
                       </TableCell>
                       <TableCell className="text-sm">
                         {new Date(row.issuedAt).toLocaleDateString()}

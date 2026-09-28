@@ -115,6 +115,22 @@ async function upgradeLegacySqliteSchema(
     tables.add('RmCode');
   }
 
+  const rmCodeColumns = await getSqliteColumns(prisma, 'RmCode');
+  await addSqliteColumnIfMissing(
+    prisma,
+    'RmCode',
+    rmCodeColumns,
+    'vendorId',
+    'INTEGER',
+  );
+  await addSqliteColumnIfMissing(
+    prisma,
+    'RmCode',
+    rmCodeColumns,
+    'prodArea',
+    'TEXT',
+  );
+
   const sessionColumns = await getSqliteColumns(prisma, 'WeighSession');
   await addSqliteColumnIfMissing(
     prisma,
@@ -177,6 +193,7 @@ async function upgradeLegacySqliteSchema(
 
   const indexes = [
     'CREATE UNIQUE INDEX IF NOT EXISTS "RmCode_code_key" ON "RmCode"("code")',
+    'CREATE INDEX IF NOT EXISTS "RmCode_vendorId_deletedAt_idx" ON "RmCode"("vendorId", "deletedAt")',
     'CREATE INDEX IF NOT EXISTS "WeighSession_packageUid_idx" ON "WeighSession"("packageUid")',
     'CREATE INDEX IF NOT EXISTS "WeighSession_gatewayId_idx" ON "WeighSession"("gatewayId")',
     'CREATE INDEX IF NOT EXISTS "WeighSession_scaleId_idx" ON "WeighSession"("scaleId")',

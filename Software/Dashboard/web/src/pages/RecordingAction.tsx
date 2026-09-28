@@ -313,6 +313,9 @@ export default function RecordingAction() {
 
   const canStart = !!(session && currentWeight && currentWeight.stable);
   const packingOptions: Packaging[] = selectedVendor?.packagings || [];
+  const filteredRmCodes = vendorId
+    ? rmCodes.filter((rm) => rm.vendorId === Number(vendorId))
+    : [];
 
   return (
     <div className="p-6 lg:p-8 max-w-[1400px] mx-auto bg-[#f5ebe0] min-h-full">
@@ -419,6 +422,7 @@ export default function RecordingAction() {
                       onValueChange={(v) => {
                         setVendorId(v);
                         setPackagingId('');
+                        setRmCodeId('');
                       }}
                       disabled={isConfigConfirmed}
                     >
@@ -458,13 +462,13 @@ export default function RecordingAction() {
                     <Select
                       value={rmCodeId || undefined}
                       onValueChange={setRmCodeId}
-                      disabled={isConfigConfirmed}
+                      disabled={isConfigConfirmed || !vendorId}
                     >
                       <SelectTrigger className="h-10">
                         <SelectValue placeholder={t('selectRmCode')} />
                       </SelectTrigger>
                       <SelectContent>
-                        {rmCodes.map((rm) => (
+                        {filteredRmCodes.map((rm) => (
                           <SelectItem key={rm.id} value={String(rm.id)}>
                             {rm.code}
                             {rm.name ? ` — ${rm.name}` : ''}

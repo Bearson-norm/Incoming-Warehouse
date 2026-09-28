@@ -5,7 +5,12 @@
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $electronAppDir = Split-Path -Parent $scriptDir
 $projectRoot = Split-Path -Parent $electronAppDir
-$releasePath = Join-Path $projectRoot 'release'
+$releaseFolderName = if ($env:ELECTRON_OUTPUT_DIR) {
+    Split-Path -Leaf $env:ELECTRON_OUTPUT_DIR.TrimEnd('\', '/')
+} else {
+    'release'
+}
+$releasePath = Join-Path $projectRoot $releaseFolderName
 Set-Location $electronAppDir
 
 Write-Host "Working directory: $(Get-Location)" -ForegroundColor Gray
@@ -146,6 +151,12 @@ foreach ($propName in $validBuildProps) {
     if ($packageJson.build.PSObject.Properties.Name -contains $propName) {
         $buildConfig[$propName] = $packageJson.build.$propName
     }
+}
+
+# Allow packaging into a fresh directory when an existing win-unpacked folder
+# is locked by Electron, antivirus, or an indexer.
+if ($buildConfig['directories']) {
+    $buildConfig['directories'].output = "../$releaseFolderName"
 }
 
 # Clean win config: remove signing-related properties and add forceCodeSigning: false

@@ -1,4 +1,12 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateRmCodeDto {
   @IsString()
@@ -10,4 +18,15 @@ export class CreateRmCodeDto {
   @IsString()
   @MaxLength(128)
   name?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  vendorId?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  prodArea?: string;
 }
