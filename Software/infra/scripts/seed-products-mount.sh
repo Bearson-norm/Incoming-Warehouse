@@ -42,19 +42,29 @@ echo "[seed] Generating Prisma client from current schema (vendorId, prodArea)..
 (cd "$API" && npx prisma generate)
 
 WS_NODE="$ROOT/node_modules"
+PRISMA_BIN="$WS_NODE/.bin/prisma"
 if [[ ! -d "$WS_NODE/@prisma/client" ]]; then
   echo "Prisma client not found at $WS_NODE/@prisma/client — run: (cd $API && npm run install:vps-api-only && npx prisma generate)"
   exit 1
 fi
+if [[ ! -x "$PRISMA_BIN" ]]; then
+  echo "Prisma CLI not found at $PRISMA_BIN"
+  exit 1
+fi
 
-echo "[seed] Running import inside Docker network..."
-echo "[seed] API code: $API | workspace node_modules: $WS_NODE"
-# Do not nest node_modules under a read-only /app mount (Docker cannot create the mountpoint).
-docker compose run --rm --no-deps \
-  -e DATABASE_URL \
-  -e NODE_PATH=/workspace/node_modules \
-  -v "$API:/workspace/api:ro" \
-  -v "$WS_NODE:/workspace/node_modules:ro" \
-  -w /workspace/api \
-  --entrypoint node \
-  api dist-scripts/scripts/import-products-csv.js
+run_in_api_network() {
+  # Sibling mounts: avoid nesting volumes under a read-only /app tree.
+  docker compose run --rm --no-deps \
+    -e DATABASE_URL \
+    -e NODE_PATH=/workspace/node_modules \
+    -v "$API:/workspace/api:ro" \
+    -v "$WS_NODE:/workspace/node_modules:ro" \
+    -w /workspace/api \
+    "$@"
+}
+
+echo "[seed] Applying migrations from git (image API may be outdated)..."
+run_in_api_network --entrypoint /workspace/node_modules/.bin/prisma api migrate deploy
+
+echo "[seed] Importing products CSV..."
+run_in_api_network --entrypoint node api dist-scripts/scripts/import-products-csv.js

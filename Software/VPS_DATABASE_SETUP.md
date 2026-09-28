@@ -234,7 +234,9 @@ docker compose exec api npm run prisma:migrate:deploy
 docker compose exec api npm run seed:products
 ```
 
-`No pending migrations` = migrasi sudah terpasang. `Missing script: seed:products` = image API lama — jalankan `docker compose build api` lagi.
+`No pending migrations` dari **`docker compose exec api`** hanya memakai folder migrasi **di dalam image**. Jika image lama, kolom `RmCode.vendorId` belum ada di DB meski `migrate deploy` bilang kosong — gunakan `seed-products-mount.sh` (migrasi dari git di host) atau rebuild image.
+
+`Missing script: seed:products` = image API lama — jalankan `docker compose build api` lagi.
 
 ### Seed tanpa rebuild image (disk penuh / build gagal)
 
