@@ -250,7 +250,13 @@ git pull
 
 chmod +x Software/infra/scripts/seed-products-mount.sh
 Software/infra/scripts/seed-products-mount.sh
+
+# Standar tare jerigen (Packaging) — setelah seed RM
+chmod +x Software/infra/scripts/seed-tare-mount.sh
+Software/infra/scripts/seed-tare-mount.sh
 ```
+
+Setelah `seed-tare-mount.sh` sukses, log impor menampilkan ringkasan dan verifikasi, misalnya `44 rows`, `verify: 44 packaging row(s) tagged standar-tare-jerrycan`, plus jumlah kemasan per vendor (19 supplier di CSV; vendor baru seperti `VG SIL` / `PG SIL` muncul di baris `Created vendor` jika belum ada dari seed RM).
 
 Jika `docker compose build api` gagal **lookup registry-1.docker.io / i/o timeout**, itu masalah DNS/jaringan VPS ke Docker Hub — coba lagi nanti atau perbaiki DNS (`/etc/resolv.conf`). Seed mount **tidak** butuh build/pull image baru.
 

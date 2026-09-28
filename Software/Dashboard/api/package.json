@@ -27,6 +27,8 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "seed:products": "node dist-scripts/scripts/import-products-csv.js",
     "seed:products:dev": "ts-node scripts/import-products-csv.ts",
+    "seed:tare": "node dist-scripts/scripts/import-tare-packagings-csv.js",
+    "seed:tare:dev": "ts-node scripts/import-tare-packagings-csv.ts",
     "prisma:import-sqlite": "ts-node scripts/import-sqlite.ts",
     "install:vps-api-only": "npm install --ignore-workspaces"
   },

@@ -11,6 +11,9 @@
   },
   "include": [
     "scripts/import-products-csv.ts",
-    "scripts/lib/parse-products-csv.ts"
+    "scripts/import-tare-packagings-csv.ts",
+    "scripts/lib/parse-products-csv.ts",
+    "scripts/lib/parse-tare-jerrycan-csv.ts",
+    "scripts/lib/resolve-tare-vendor.ts"
   ]
 }

@@ -154,11 +154,15 @@ npm run prisma:seed
 npm run build:scripts && npm run seed:products
 # Dev tanpa compile: npm run seed:products:dev
 # Atau file lain: PRODUCTS_CSV=C:\path\to\products.csv npm run seed:products
+
+# Impor standar tare jerigen (Packaging per vendor) — jalankan setelah seed RM
+npm run seed:tare
+# Dev: npm run seed:tare:dev
 ```
 
 **Catatan:** 
 - User default: `admin` / `admin123`
-- Data RM default ada di `Dashboard/api/data/products-rm.csv`. Setelah impor di PostgreSQL (cloud), stasiun Electron sinkronkan dari halaman **Database** → **Sync**.
+- Data RM default ada di `Dashboard/api/data/products-rm.csv`. Tare jerigen: `Dashboard/api/data/standar-tare-jerrycan.csv`. Setelah impor di PostgreSQL (cloud), stasiun Electron sinkronkan dari halaman **Database** → **Sync**.
 - Jika migration error, pastikan PostgreSQL berjalan dan database `wis_foom` sudah dibuat
 
 ### Step 5: Build Projects (Optional untuk Development)
