@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-scripts
 .env
 .env.local
 *.log
@@ -10,3 +11,7 @@ README.md
 .idea
 coverage
 .nyc_output
+test
+prisma-sqlite
+*.md
+docs

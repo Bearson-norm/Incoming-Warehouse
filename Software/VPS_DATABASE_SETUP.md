@@ -180,15 +180,26 @@ docker-compose exec api npm run prisma:seed
 
 ### Perbaiki hak akses & ruang disk (sekali)
 
+`docker compose build api` gagal dengan **ENOSPC** = disk penuh (sering karena `npm ci` + cache Docker + install monorepo gagal).
+
 ```bash
 df -h
+sudo du -sh /var/lib/docker/* 2>/dev/null | sort -h | tail -5
 sudo du -sh /opt/Incoming-Warehouse/Software/node_modules 2>/dev/null || true
-# Hapus install gagal / monorepo penuh (jika ada):
+
+# Hapus install npm gagal di host
 sudo rm -rf /opt/Incoming-Warehouse/Software/node_modules
 sudo chown -R foom:foom /opt/Incoming-Warehouse
+
+# Kosongkan cache (butuh beberapa GB kosong untuk build API)
+sudo docker builder prune -af
+sudo docker system prune -af   # hapus image/container tidak terpakai — API akan di-build ulang
 sudo npm cache clean --force
-# Kosongkan log/apt jika disk penuh, lalu cek lagi: df -h
+
+df -h
 ```
+
+Target: **≥ 3–4 GB kosong** sebelum `docker compose build api`.
 
 ### Migrasi + seed (hanya paket API — disarankan di VPS)
 
@@ -224,6 +235,19 @@ docker compose exec api npm run seed:products
 ```
 
 `No pending migrations` = migrasi sudah terpasang. `Missing script: seed:products` = image API lama — jalankan `docker compose build api` lagi.
+
+### Seed tanpa rebuild image (disk penuh / build gagal)
+
+Pakai image API yang **sudah jalan**, mount CSV + script dari `git`:
+
+```bash
+cd /opt/Incoming-Warehouse
+git pull
+chmod +x Software/infra/scripts/seed-products-mount.sh
+Software/infra/scripts/seed-products-mount.sh
+```
+
+Script ini menjalankan `npm run install:vps-api-only` + `build:scripts` hanya di `Dashboard/api` (lebih kecil dari Docker build), lalu import lewat jaringan Docker ke Postgres.
 
 ### Development laptop (monorepo penuh)
 

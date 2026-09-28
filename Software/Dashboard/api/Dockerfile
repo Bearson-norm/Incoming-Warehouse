@@ -9,15 +9,17 @@ RUN apt-get update \
 COPY package*.json ./
 COPY prisma ./prisma/
 
-RUN npm ci
+RUN npm ci \
+  && npm cache clean --force
 
 COPY . .
 
-RUN npx prisma generate
-
-RUN npm run build
-RUN npm run build:scripts
-RUN test -f dist/src/main.js || test -f dist/main.js
+RUN npx prisma generate \
+  && npm run build \
+  && npm run build:scripts \
+  && (test -f dist/src/main.js || test -f dist/main.js) \
+  && npm prune --omit=dev \
+  && npm cache clean --force
 
 FROM node:18-bookworm-slim
 
@@ -30,14 +32,10 @@ RUN apt-get update \
 COPY package*.json ./
 COPY prisma ./prisma/
 
-RUN npm ci --omit=dev
-
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist-scripts ./dist-scripts
 COPY --from=builder /app/data ./data
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 EXPOSE 4123
 
