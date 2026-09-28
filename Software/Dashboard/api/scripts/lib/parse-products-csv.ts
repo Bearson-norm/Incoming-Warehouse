@@ -118,5 +118,5 @@ export function parseProductsCsv(filePath: string): {
 }
 
 export function defaultProductsCsvPath(): string {
-  return path.resolve(__dirname, '../../data/products-rm.csv');
+  return path.resolve(process.cwd(), 'data/products-rm.csv');
 }

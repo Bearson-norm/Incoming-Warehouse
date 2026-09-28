@@ -211,11 +211,19 @@ Prisma CLI ada di `Dashboard/api/node_modules/.bin/prisma` (versi **5.22.x**). J
 
 ### Alternatif: Docker (tanpa npm di host)
 
+Setelah `git pull`, **rebuild image** supaya `seed:products` dan CSV ikut masuk container:
+
 ```bash
-cd /opt/Incoming-Warehouse/Software/infra
+cd /opt/Incoming-Warehouse
+git pull
+cd Software/infra
+docker compose build api
+docker compose up -d api
 docker compose exec api npm run prisma:migrate:deploy
 docker compose exec api npm run seed:products
 ```
+
+`No pending migrations` = migrasi sudah terpasang. `Missing script: seed:products` = image API lama — jalankan `docker compose build api` lagi.
 
 ### Development laptop (monorepo penuh)
 

@@ -16,6 +16,7 @@ COPY . .
 RUN npx prisma generate
 
 RUN npm run build
+RUN npm run build:scripts
 RUN test -f dist/src/main.js || test -f dist/main.js
 
 FROM node:18-bookworm-slim
@@ -32,6 +33,8 @@ COPY prisma ./prisma/
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/dist-scripts ./dist-scripts
+COPY --from=builder /app/data ./data
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma

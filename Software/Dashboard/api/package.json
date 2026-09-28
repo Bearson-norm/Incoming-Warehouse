@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "build:scripts": "tsc -p tsconfig.scripts.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -24,7 +25,8 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:deploy:sqlite": "prisma migrate deploy --schema prisma-sqlite/schema.prisma",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "seed:products": "ts-node scripts/import-products-csv.ts",
+    "seed:products": "node dist-scripts/scripts/import-products-csv.js",
+    "seed:products:dev": "ts-node scripts/import-products-csv.ts",
     "prisma:import-sqlite": "ts-node scripts/import-sqlite.ts",
     "install:vps-api-only": "npm install --ignore-workspaces"
   },

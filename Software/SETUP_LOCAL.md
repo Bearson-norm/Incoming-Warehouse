@@ -151,7 +151,8 @@ npm run prisma:migrate:dev
 npm run prisma:seed
 
 # Impor master data RM + vendor dari CSV (opsional, idempotent)
-npm run seed:products
+npm run build:scripts && npm run seed:products
+# Dev tanpa compile: npm run seed:products:dev
 # Atau file lain: PRODUCTS_CSV=C:\path\to\products.csv npm run seed:products
 ```
 
