@@ -247,7 +247,9 @@ chmod +x Software/infra/scripts/seed-products-mount.sh
 Software/infra/scripts/seed-products-mount.sh
 ```
 
-Script ini menjalankan `npm run install:vps-api-only` + `build:scripts` hanya di `Dashboard/api` (lebih kecil dari Docker build), lalu import lewat jaringan Docker ke Postgres.
+Script ini menjalankan `npm run install:vps-api-only` + `build:scripts` + `prisma generate` di `Dashboard/api`, lalu import lewat jaringan Docker dengan **Prisma Client dari host** (image API lama tidak mengenal `vendorId` pada `RmCode`).
+
+Setelah seed berhasil, **rebuild image API** saat disk cukup — container yang masih lama tidak bisa memakai relasi vendor–RM di runtime sampai di-build ulang dari kode terbaru.
 
 ### Development laptop (monorepo penuh)
 

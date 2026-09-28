@@ -28,15 +28,26 @@ if [[ ! -f "$API/data/products-rm.csv" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$API/dist-scripts/scripts/import-products-csv.js" ]]; then
-  echo "[seed] Building dist-scripts on host (API-only npm install)..."
-  (cd "$API" && npm run install:vps-api-only && npm run build:scripts)
+if [[ ! -d "$API/node_modules/@prisma/client" ]]; then
+  echo "[seed] Installing API dependencies on host..."
+  (cd "$API" && npm run install:vps-api-only)
 fi
 
-echo "[seed] Running import inside Docker network (existing api image)..."
+if [[ ! -f "$API/dist-scripts/scripts/import-products-csv.js" ]]; then
+  echo "[seed] Compiling import script..."
+  (cd "$API" && npm run build:scripts)
+fi
+
+echo "[seed] Generating Prisma client from current schema (vendorId, prodArea)..."
+(cd "$API" && npx prisma generate)
+
+echo "[seed] Running import inside Docker network..."
+echo "[seed] Mounting host Prisma client — required if API image was built before RM schema change."
 docker compose run --rm --no-deps \
   -e DATABASE_URL \
   -v "$API/data:/app/data:ro" \
   -v "$API/dist-scripts:/app/dist-scripts:ro" \
+  -v "$API/node_modules/@prisma:/app/node_modules/@prisma:ro" \
+  -v "$API/node_modules/.prisma:/app/node_modules/.prisma:ro" \
   --entrypoint node \
   api /app/dist-scripts/scripts/import-products-csv.js
