@@ -49,9 +49,12 @@ fi
 
 echo "[seed] Running import inside Docker network..."
 echo "[seed] API code: $API | workspace node_modules: $WS_NODE"
+# Do not nest node_modules under a read-only /app mount (Docker cannot create the mountpoint).
 docker compose run --rm --no-deps \
   -e DATABASE_URL \
-  -v "$API:/app:ro" \
-  -v "$WS_NODE:/app/node_modules:ro" \
+  -e NODE_PATH=/workspace/node_modules \
+  -v "$API:/workspace/api:ro" \
+  -v "$WS_NODE:/workspace/node_modules:ro" \
+  -w /workspace/api \
   --entrypoint node \
-  api /app/dist-scripts/scripts/import-products-csv.js
+  api dist-scripts/scripts/import-products-csv.js
