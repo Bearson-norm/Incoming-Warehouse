@@ -25,7 +25,8 @@
     "prisma:migrate:deploy:sqlite": "prisma migrate deploy --schema prisma-sqlite/schema.prisma",
     "prisma:seed": "ts-node prisma/seed.ts",
     "seed:products": "ts-node scripts/import-products-csv.ts",
-    "prisma:import-sqlite": "ts-node scripts/import-sqlite.ts"
+    "prisma:import-sqlite": "ts-node scripts/import-sqlite.ts",
+    "install:vps-api-only": "npm install --ignore-workspaces"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

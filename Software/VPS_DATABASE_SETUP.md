@@ -176,32 +176,53 @@ docker-compose exec api npx prisma migrate deploy
 docker-compose exec api npm run prisma:seed
 ```
 
-**Di VPS (tanpa Docker):** jalankan sebagai user deploy (`foom`), **jangan** `sudo npm run` — `sudo` sering membuat `prisma: not found` karena PATH/`node_modules` berbeda.
+**Di VPS (tanpa Docker):** jalankan sebagai user deploy (`foom`). **Jangan** `sudo npm install` di `/opt/...` — itu membuat folder `root`, user `foom` dapat **EACCES**, dan install **seluruh monorepo** (web + Electron) bisa memenuhi disk (**ENOSPC**).
 
-**Penting:** `npm install` harus dari **`Software/`** (workspace root), bukan hanya `Dashboard/api`. Jangan jawab **Y** jika `npx` menawarkan `prisma@8.x` — itu artinya CLI lokal belum terpasang; `npx` akan mengunduh Prisma 8 yang butuh Node 22+.
+### Perbaiki hak akses & ruang disk (sekali)
 
 ```bash
-cd /opt/Incoming-Warehouse/Software
-git pull
-npm install
-export DATABASE_URL="postgresql://admin:PASSWORD@localhost:5432/wis_foom?schema=public"
-npm run prisma:migrate:deploy --workspace=@incoming-warehouse/api
-npm run seed:products --workspace=@incoming-warehouse/api
+df -h
+sudo du -sh /opt/Incoming-Warehouse/Software/node_modules 2>/dev/null || true
+# Hapus install gagal / monorepo penuh (jika ada):
+sudo rm -rf /opt/Incoming-Warehouse/Software/node_modules
+sudo chown -R foom:foom /opt/Incoming-Warehouse
+sudo npm cache clean --force
+# Kosongkan log/apt jika disk penuh, lalu cek lagi: df -h
 ```
 
-Alternatif (setelah `npm install` di `Software/`):
+### Migrasi + seed (hanya paket API — disarankan di VPS)
+
+Jangan `npm install` di `Software/` kecuali Anda memang build semua workspace di server. Cukup dependensi **Dashboard/api**:
 
 ```bash
-cd /opt/Incoming-Warehouse/Software/Dashboard/api
+cd /opt/Incoming-Warehouse
+git pull
+
+cd Software/Dashboard/api
+npm run install:vps-api-only
+# atau: bash scripts/vps-api-deps.sh
+
 export DATABASE_URL="postgresql://admin:PASSWORD@localhost:5432/wis_foom?schema=public"
 npm run prisma:migrate:deploy
+npm run seed:products
 ```
 
-Jika perlu memastikan bin lokal (tanpa unduh Prisma 8):
+Prisma CLI ada di `Dashboard/api/node_modules/.bin/prisma` (versi **5.22.x**). Jangan jawab **Y** jika `npx` menawarkan **prisma@8.x**.
+
+### Alternatif: Docker (tanpa npm di host)
 
 ```bash
-cd /opt/Incoming-Warehouse/Software
-./node_modules/.bin/prisma migrate deploy --schema Dashboard/api/prisma/schema.prisma
+cd /opt/Incoming-Warehouse/Software/infra
+docker compose exec api npm run prisma:migrate:deploy
+docker compose exec api npm run seed:products
+```
+
+### Development laptop (monorepo penuh)
+
+```bash
+cd Software
+npm install
+npm run prisma:migrate:deploy --workspace=@incoming-warehouse/api
 ```
 
 ---
