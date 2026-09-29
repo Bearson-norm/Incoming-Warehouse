@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuthStore } from '../store/authStore';
@@ -86,6 +86,7 @@ export default function Setting() {
     useState<GatewayDeviceConfig>(defaultGatewayDeviceConfig);
   const [gatewaySerialPorts, setGatewaySerialPorts] = useState<GatewaySerialPort[]>([]);
   const [gatewayConfigLoading, setGatewayConfigLoading] = useState(false);
+  const gatewayConfigLoadInFlight = useRef(false);
 
   const [odooConfig, setOdooConfig] = useState({
     baseUrl: '',
@@ -377,8 +378,10 @@ export default function Setting() {
 
   const loadGatewayDeviceConfig = async () => {
     if (!isElectron || !(window as any).electron?.gateway) return;
+    if (gatewayConfigLoadInFlight.current) return;
 
     try {
+      gatewayConfigLoadInFlight.current = true;
       setGatewayConfigLoading(true);
       const configResult = await (window as any).electron.gateway.getDeviceConfig();
       if (!configResult.success || !configResult.config) {
@@ -395,6 +398,7 @@ export default function Setting() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
+      gatewayConfigLoadInFlight.current = false;
       setGatewayConfigLoading(false);
     }
   };

@@ -129,6 +129,7 @@ class WeighingGateway {
         console.log('Reloading configuration...');
         this.config = this.loadConfig(this.configPath);
       },
+      () => this.reapplySerial(),
       this.config.server.apiKey || process.env.GATEWAY_API_KEY || '',
     );
     this.configServer.start();
@@ -269,6 +270,18 @@ class WeighingGateway {
       console.log('Reconnecting to serial port...');
       this.connectSerial();
     }, 5000);
+  }
+
+  /** Re-open serial port after config change without restarting the gateway process. */
+  async reapplySerial(): Promise<void> {
+    this.config = this.loadConfig(this.configPath);
+    if (this.serialPort?.isOpen) {
+      await new Promise<void>((resolve) => {
+        this.serialPort!.close(() => resolve());
+      });
+    }
+    this.serialPort = null;
+    await this.connectSerial();
   }
 
   private handleSerialData(data: string) {

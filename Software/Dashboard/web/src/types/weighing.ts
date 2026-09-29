@@ -34,7 +34,9 @@ export interface Packaging {
   id: number;
   cloudId: string;
   vendorId: number;
-  vendorCloudId?: string;
+  vendorCloudId?: string | null;
+  /** Populated by GET /cloud/master-data from vendor join */
+  vendorName?: string | null;
   name: string;
   tareWeight: number | null;
   metadata?: string | null;

@@ -7,6 +7,7 @@ import { isSqliteDatabaseUrl } from '../common/runtime-secrets';
 
 const INITIAL_SQLITE_MIGRATION = '20260918100000_init_sqlite';
 const CLOUD_SCALE_SQLITE_MIGRATION = '20260918140000_cloud_scale_local';
+const RM_VENDOR_PROD_AREA_MIGRATION = '20260928120000_rm_code_vendor_prod_area';
 
 type SqliteNameRow = { name: string };
 type SqliteColumnRow = { name: string };
@@ -294,6 +295,28 @@ async function baselineLegacySqliteDatabase(
         'resolve',
         '--applied',
         CLOUD_SCALE_SQLITE_MIGRATION,
+      ]);
+    }
+
+    const rmColumns = await getSqliteColumns(prisma, 'RmCode');
+    migrations = await getAppliedMigrations(
+      prisma,
+      await getSqliteTableNames(prisma),
+    );
+    const rmVendorProdAreaExists =
+      rmColumns.has('vendorId') && rmColumns.has('prodArea');
+    if (
+      rmVendorProdAreaExists &&
+      !migrationWasApplied(migrations, RM_VENDOR_PROD_AREA_MIGRATION)
+    ) {
+      console.log(
+        '[db-bootstrap] Baselining RmCode vendorId/prodArea (already present)...',
+      );
+      runPrismaMigrationCommand(prismaCli, cwd, schemaPath, [
+        'migrate',
+        'resolve',
+        '--applied',
+        RM_VENDOR_PROD_AREA_MIGRATION,
       ]);
     }
   } finally {

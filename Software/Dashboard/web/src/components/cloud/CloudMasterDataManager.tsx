@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Edit, History, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "../../services/api";
@@ -40,22 +40,64 @@ import { SearchableSelect } from "../SearchableSelect";
 
 type MasterRow = Vendor | Packaging | RmCode;
 
-function vendorNameForRm(rm: RmCode, vendors: Vendor[]): string {
-  if (rm.vendorName?.trim()) {
-    return rm.vendorName.trim();
-  }
-  if (rm.vendorCloudId) {
-    const byCloud = vendors.find((v) => v.cloudId === rm.vendorCloudId);
+type VendorLink = {
+  vendorName?: string | null;
+  vendorCloudId?: string | null;
+  vendorId?: number | null;
+};
+
+function resolveVendorLabel(vendors: Vendor[], link: VendorLink): string {
+  if (link.vendorName?.trim()) return link.vendorName.trim();
+  if (link.vendorCloudId) {
+    const byCloud = vendors.find((v) => v.cloudId === link.vendorCloudId);
     if (byCloud) return byCloud.name;
   }
-  if (rm.vendorId != null) {
-    const vendorId = Number(rm.vendorId);
+  if (link.vendorId != null) {
+    const vendorId = Number(link.vendorId);
     const byId = vendors.find(
-      (v) => v.id === vendorId || String(v.id) === String(rm.vendorId),
+      (v) => v.id === vendorId || String(v.id) === String(link.vendorId),
     );
     if (byId) return byId.name;
   }
   return "—";
+}
+
+function resolveVendorCloudId(vendors: Vendor[], link: VendorLink): string {
+  if (link.vendorCloudId) return link.vendorCloudId;
+  if (link.vendorId != null) {
+    const vendorId = Number(link.vendorId);
+    const byId = vendors.find(
+      (v) => v.id === vendorId || String(v.id) === String(link.vendorId),
+    );
+    if (byId) return byId.cloudId;
+  }
+  return "";
+}
+
+type PackagingMeta = {
+  grossWeightGr?: number;
+  tareWeightGr?: number;
+  source?: string;
+};
+
+function parsePackagingMetadata(metadata?: string | null): PackagingMeta {
+  if (!metadata?.trim()) return {};
+  try {
+    return JSON.parse(metadata) as PackagingMeta;
+  } catch {
+    return {};
+  }
+}
+
+function formatTareKg(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  return `${value} kg`;
+}
+
+function matchesQuery(text: string, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return text.toLowerCase().includes(q);
 }
 
 export function CloudMasterDataManager() {
@@ -76,6 +118,9 @@ export function CloudMasterDataManager() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleting, setDeleting] = useState<{ type: MasterEntityType; row: MasterRow } | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
+  const [vendorQuery, setVendorQuery] = useState("");
+  const [tareQuery, setTareQuery] = useState("");
+  const [rmQuery, setRmQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,15 +139,16 @@ export function CloudMasterDataManager() {
   }, [load]);
 
   const openEditor = (type: MasterEntityType, row?: MasterRow) => {
+    const vendors = (data?.vendors || []).filter((v) => !v.deletedAt);
     setEntityType(type);
     setEditing(row || null);
     setName(row?.name || "");
     setCode(type === "rmCode" && row ? (row as RmCode).code : "");
     setVendorCloudId(
       type === "packaging" && row
-        ? (row as Packaging).vendorCloudId || ""
+        ? resolveVendorCloudId(vendors, row as Packaging)
         : type === "rmCode" && row
-          ? (row as RmCode).vendorCloudId || ""
+          ? resolveVendorCloudId(vendors, row as RmCode)
           : "",
     );
     setTareWeight(
@@ -207,6 +253,51 @@ export function CloudMasterDataManager() {
     (row) => !row.deletedAt,
   );
   const activeRmCodes = (data?.rmCodes || []).filter((row) => !row.deletedAt);
+
+  const filteredVendors = useMemo(() => {
+    return activeVendors.filter((v) => matchesQuery(v.name, vendorQuery));
+  }, [activeVendors, vendorQuery]);
+
+  const filteredPackagings = useMemo(() => {
+    return [...activePackagings]
+      .filter((p) => {
+        const vendor = resolveVendorLabel(activeVendors, p);
+        const meta = parsePackagingMetadata(p.metadata);
+        const haystack = [
+          vendor,
+          p.name,
+          formatTareKg(p.tareWeight),
+          meta.grossWeightGr != null ? String(meta.grossWeightGr) : "",
+          meta.source || "",
+        ].join(" ");
+        return matchesQuery(haystack, tareQuery);
+      })
+      .sort((a, b) => {
+        const va = resolveVendorLabel(activeVendors, a);
+        const vb = resolveVendorLabel(activeVendors, b);
+        const byVendor = va.localeCompare(vb);
+        if (byVendor !== 0) return byVendor;
+        return a.name.localeCompare(b.name);
+      });
+  }, [activePackagings, activeVendors, tareQuery]);
+
+  const filteredRmCodes = useMemo(() => {
+    return [...activeRmCodes]
+      .filter((rm) => {
+        const vendor = resolveVendorLabel(activeVendors, rm);
+        const haystack = [rm.code, rm.name || "", vendor, rm.prodArea || ""].join(
+          " ",
+        );
+        return matchesQuery(haystack, rmQuery);
+      })
+      .sort((a, b) => {
+        const va = resolveVendorLabel(activeVendors, a);
+        const vb = resolveVendorLabel(activeVendors, b);
+        const byVendor = va.localeCompare(vb);
+        if (byVendor !== 0) return byVendor;
+        return a.code.localeCompare(b.code);
+      });
+  }, [activeRmCodes, activeVendors, rmQuery]);
   const actions = (type: MasterEntityType, row: MasterRow) => (
     <div className="flex justify-end gap-1">
       <Button
@@ -256,123 +347,182 @@ export function CloudMasterDataManager() {
       </CardHeader>
       <CardContent className="space-y-6">
         <section>
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">Vendor dan kemasan</h3>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => openEditor("vendor")}>
-                <Plus className="w-4 h-4 mr-1" /> Vendor
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openEditor("packaging")}
-              >
-                <Plus className="w-4 h-4 mr-1" /> Kemasan
-              </Button>
-            </div>
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+            <h3 className="font-semibold">
+              Vendor{" "}
+              <span className="text-xs font-normal text-[#8d6e63]">
+                ({filteredVendors.length}/{activeVendors.length})
+              </span>
+            </h3>
+            <Button size="sm" onClick={() => openEditor("vendor")}>
+              <Plus className="w-4 h-4 mr-1" /> Vendor
+            </Button>
           </div>
-          <div className="overflow-x-auto">
+          <Input
+            value={vendorQuery}
+            onChange={(e) => setVendorQuery(e.target.value)}
+            placeholder="Cari vendor…"
+            className="mb-2 max-w-md h-9 bg-white"
+          />
+          <div className="max-h-56 overflow-auto rounded-md border border-[#d7ccc8]">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 bg-[#fff8f0] z-10">
                 <TableRow>
-                  <TableHead>Vendor / kemasan</TableHead>
-                  <TableHead>Dibentuk</TableHead>
+                  <TableHead>Nama vendor</TableHead>
                   <TableHead>Terakhir diubah</TableHead>
                   <TableHead>Rev.</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activeVendors.map((vendor) => (
-                  <Fragment key={vendor.cloudId}>
-                    <TableRow>
-                      <TableCell className="font-semibold">
-                        {vendor.name}
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {new Date(vendor.createdAt).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-xs">
+                {filteredVendors.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-sm text-[#8d6e63] py-6">
+                      Tidak ada vendor yang cocok.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredVendors.map((vendor) => (
+                    <TableRow key={vendor.cloudId}>
+                      <TableCell className="font-medium">{vendor.name}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
                         {new Date(vendor.updatedAt).toLocaleString()}
                       </TableCell>
                       <TableCell>{vendor.revision}</TableCell>
                       <TableCell>{actions("vendor", vendor)}</TableCell>
                     </TableRow>
-                    {activePackagings
-                      .filter(
-                        (row) =>
-                          row.vendorCloudId === vendor.cloudId ||
-                          row.vendorId === vendor.id,
-                      )
-                      .map((packaging) => (
-                        <TableRow
-                          key={packaging.cloudId}
-                          className="bg-[#f8f1e9]"
-                        >
-                          <TableCell className="pl-8">
-                            {packaging.name} · tare{" "}
-                            {packaging.tareWeight ?? "—"} kg
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {new Date(packaging.createdAt).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {new Date(packaging.updatedAt).toLocaleString()}
-                          </TableCell>
-                          <TableCell>{packaging.revision}</TableCell>
-                          <TableCell>
-                            {actions("packaging", packaging)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </Fragment>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
         </section>
 
         <section>
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">Daftar kode RM</h3>
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+            <h3 className="font-semibold">
+              Standar tare jerigen{" "}
+              <span className="text-xs font-normal text-[#8d6e63]">
+                ({filteredPackagings.length}/{activePackagings.length})
+              </span>
+            </h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => openEditor("packaging")}
+            >
+              <Plus className="w-4 h-4 mr-1" /> Kemasan
+            </Button>
+          </div>
+          <Input
+            value={tareQuery}
+            onChange={(e) => setTareQuery(e.target.value)}
+            placeholder="Cari vendor, jenis jerigen, tare…"
+            className="mb-2 max-w-md h-9 bg-white"
+          />
+          <div className="max-h-[360px] overflow-auto rounded-md border border-[#d7ccc8]">
+            <Table>
+              <TableHeader className="sticky top-0 bg-[#fff8f0] z-10">
+                <TableRow>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Jenis jerigen</TableHead>
+                  <TableHead className="text-right">Tare</TableHead>
+                  <TableHead className="text-right">Bruto (gr)</TableHead>
+                  <TableHead>Terakhir diubah</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredPackagings.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-sm text-[#8d6e63] py-6">
+                      Tidak ada data kemasan. Jalankan seed tare di server cloud jika perlu.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredPackagings.map((packaging) => {
+                    const meta = parsePackagingMetadata(packaging.metadata);
+                    return (
+                      <TableRow key={packaging.cloudId}>
+                        <TableCell className="text-sm max-w-[200px]">
+                          {resolveVendorLabel(activeVendors, packaging)}
+                        </TableCell>
+                        <TableCell className="text-sm">{packaging.name}</TableCell>
+                        <TableCell className="text-sm text-right font-mono tabular-nums">
+                          {formatTareKg(packaging.tareWeight)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right font-mono tabular-nums">
+                          {meta.grossWeightGr != null ? meta.grossWeightGr : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {new Date(packaging.updatedAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell>{actions("packaging", packaging)}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+
+        <section>
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+            <h3 className="font-semibold">
+              Daftar kode RM{" "}
+              <span className="text-xs font-normal text-[#8d6e63]">
+                ({filteredRmCodes.length}/{activeRmCodes.length})
+              </span>
+            </h3>
             <Button size="sm" onClick={() => openEditor("rmCode")}>
               <Plus className="w-4 h-4 mr-1" /> RM
             </Button>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kode</TableHead>
-                <TableHead>Nama</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Prod Area</TableHead>
-                <TableHead>Tanggal terbit</TableHead>
-                <TableHead>Terakhir diubah</TableHead>
-                <TableHead>Rev.</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {activeRmCodes.map((rm) => (
-                <TableRow key={rm.cloudId}>
-                  <TableCell className="font-mono">{rm.code}</TableCell>
-                  <TableCell>{rm.name || "—"}</TableCell>
-                  <TableCell>
-                    {vendorNameForRm(rm, activeVendors)}
-                  </TableCell>
-                  <TableCell>{rm.prodArea || "—"}</TableCell>
-                  <TableCell>
-                    {new Date(rm.issuedAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {new Date(rm.updatedAt).toLocaleString()}
-                  </TableCell>
-                  <TableCell>{rm.revision}</TableCell>
-                  <TableCell>{actions("rmCode", rm)}</TableCell>
+          <Input
+            value={rmQuery}
+            onChange={(e) => setRmQuery(e.target.value)}
+            placeholder="Cari kode, nama, vendor, prod area…"
+            className="mb-2 max-w-md h-9 bg-white"
+          />
+          <div className="max-h-[420px] overflow-auto rounded-md border border-[#d7ccc8]">
+            <Table>
+              <TableHeader className="sticky top-0 bg-[#fff8f0] z-10">
+                <TableRow>
+                  <TableHead className="w-[100px]">Kode</TableHead>
+                  <TableHead>Nama</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead className="w-[90px]">Area</TableHead>
+                  <TableHead />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredRmCodes.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-[#8d6e63] py-6">
+                      Tidak ada kode RM yang cocok.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredRmCodes.map((rm) => (
+                    <TableRow key={rm.cloudId}>
+                      <TableCell className="font-mono text-sm font-medium">
+                        {rm.code}
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[240px] truncate" title={rm.name || ""}>
+                        {rm.name || "—"}
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[200px]">
+                        {resolveVendorLabel(activeVendors, rm)}
+                      </TableCell>
+                      <TableCell className="text-sm">{rm.prodArea || "—"}</TableCell>
+                      <TableCell>{actions("rmCode", rm)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </section>
       </CardContent>
 

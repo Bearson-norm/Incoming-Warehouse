@@ -105,6 +105,9 @@ export class ProcessManager {
     this.lastApiError = this.summarizeApiError(this.apiErrorLog);
   }
 
+  private gatewayStartPromise: Promise<void> | null = null;
+  private gatewayStoppingIntentionally = false;
+
   constructor(configManager: ConfigManager) {
     this.configManager = configManager;
   }
@@ -193,9 +196,14 @@ export class ProcessManager {
       },
     });
 
-    await this.stopGateway();
-    await this.startGateway();
-    await this.waitForGatewayConfig();
+    try {
+      await this.requestGatewayConfig('/api/reapply-serial', { method: 'POST' });
+    } catch {
+      // Older gateway build without hot-reapply — fall back to full restart.
+      await this.stopGateway();
+      await this.startGateway();
+      await this.waitForGatewayConfig();
+    }
   }
 
   /**
@@ -519,11 +527,23 @@ export class ProcessManager {
   }
 
   async startGateway(): Promise<void> {
-    if (this.gatewayProcess) {
+    if (this.gatewayStartPromise) {
+      return this.gatewayStartPromise;
+    }
+    if (this.isProcessAlive(this.gatewayProcess)) {
       console.log('Gateway process already running');
       return;
     }
 
+    this.gatewayStartPromise = this.spawnGatewayProcess();
+    try {
+      await this.gatewayStartPromise;
+    } finally {
+      this.gatewayStartPromise = null;
+    }
+  }
+
+  private async spawnGatewayProcess(): Promise<void> {
     const gatewayPath = this.getGatewayPath();
     const mainFile = this.resolveGatewayMainFile(gatewayPath);
 
@@ -574,11 +594,26 @@ export class ProcessManager {
     this.gatewayProcess.on('exit', (code, signal) => {
       console.log(`Gateway process exited with code ${code}, signal ${signal}`);
       this.gatewayProcess = null;
+      this.gatewayStartPromise = null;
+
+      const gw = this.configManager.getGatewayConfig();
+      if (
+        !this.gatewayStoppingIntentionally &&
+        gw.enabled &&
+        gw.autoStart
+      ) {
+        console.log('[Gateway] Unexpected exit — restarting...');
+        void this.startGateway().catch((err) => {
+          console.error('[Gateway] Auto-restart failed:', err);
+        });
+      }
+      this.gatewayStoppingIntentionally = false;
     });
   }
 
   async stopGateway(): Promise<void> {
     if (this.gatewayProcess) {
+      this.gatewayStoppingIntentionally = true;
       console.log('Stopping Gateway...');
       this.gatewayProcess.kill('SIGTERM');
       

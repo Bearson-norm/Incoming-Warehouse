@@ -35,6 +35,7 @@ export class ConfigServer {
   private configPath: string;
   private getConfig: () => Config;
   private reloadConfig: () => void;
+  private reapplySerial: () => Promise<void>;
   private apiKey: string;
 
   constructor(
@@ -42,12 +43,14 @@ export class ConfigServer {
     configPath: string,
     getConfig: () => Config,
     reloadConfig: () => void,
+    reapplySerial: () => Promise<void>,
     apiKey?: string,
   ) {
     this.port = port;
     this.configPath = configPath;
     this.getConfig = getConfig;
     this.reloadConfig = reloadConfig;
+    this.reapplySerial = reapplySerial;
     this.apiKey = (apiKey || process.env.GATEWAY_API_KEY || '').trim();
   }
 
@@ -82,6 +85,8 @@ export class ConfigServer {
         this.saveConfigAPI(req, res);
       } else if (pathname === '/api/serial-ports' && req.method === 'GET') {
         this.getSerialPortsAPI(res);
+      } else if (pathname === '/api/reapply-serial' && req.method === 'POST') {
+        void this.reapplySerialAPI(res);
       } else if (pathname === '/favicon.ico') {
         res.writeHead(204);
         res.end();
@@ -163,6 +168,17 @@ export class ConfigServer {
       const ports = await SerialPort.list();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(ports));
+    } catch (error: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+
+  private async reapplySerialAPI(res: http.ServerResponse) {
+    try {
+      await this.reapplySerial();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
     } catch (error: any) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: error.message }));

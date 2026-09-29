@@ -1,0 +1,19 @@
+{
+  "gateway": {
+    "enabled": true,
+    "autoStart": false
+  },
+  "odoo": {
+    "baseUrl": "",
+    "iotApiKey": ""
+  },
+  "cloud": {
+    "serverUrl": "https://wis.moof-set.web.id",
+    "syncApiKey": "33ca0d3536ac584dd42f792bf80aebada097fd462251bd0624bdf38775064921",
+    "stationId": "83b136d3-0b0b-43ce-8430-a24d2cde85aa"
+  },
+  "database": {},
+  "jwtSecret": "eb1e50f39f69cf817e23041cefd60e8f4434861ed8ea5f9a8df8b6981de4fd48",
+  "gatewayApiKey": "04355294b9c1784e100677fee9f8d8441f9dd55b15f9ab3892e20ecd2e66a3b7",
+  "adminInitialPassword": "admin123"
+}

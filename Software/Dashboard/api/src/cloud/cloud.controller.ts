@@ -64,9 +64,11 @@ export class CloudController {
           this.cloudSync.getSyncHealth(),
         ]);
         return {
-          ...publicSettings,
           ...remote,
           ...localSync,
+          // The remote response contains its own (VPS) cloud settings.
+          // Keep the station's configuration authoritative for this endpoint.
+          ...publicSettings,
           mode: 'remote',
           online: true,
         };
