@@ -4,7 +4,10 @@ import axios from 'axios';
 const isElectron = typeof window !== 'undefined' && (window as any).electron?.isElectron === true;
 
 // API base URL - in Electron, use localhost directly
-const API_BASE_URL = isElectron ? 'http://localhost:4123/api' : '/api';
+// Use the IPv4 loopback explicitly in Electron. On some Windows hosts,
+// `localhost` resolves to IPv6 first while the packaged local services are
+// reachable only through IPv4.
+const API_BASE_URL = isElectron ? 'http://127.0.0.1:4123/api' : '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

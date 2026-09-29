@@ -87,7 +87,7 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
       }),
       this.prisma.rmCode.findMany({
         where: { updatedAt },
-        include: { vendor: { select: { cloudId: true } } },
+        include: { vendor: { select: { cloudId: true, name: true } } },
       }),
     ]);
     return {
@@ -99,6 +99,7 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
       rmCodes: rmCodes.map(({ vendor, ...rm }) => ({
         ...rm,
         vendorCloudId: vendor?.cloudId ?? null,
+        vendorName: vendor?.name ?? null,
       })),
       cursor: watermark.toISOString(),
       generatedAt: watermark.toISOString(),

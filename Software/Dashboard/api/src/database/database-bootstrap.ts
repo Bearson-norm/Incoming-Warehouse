@@ -10,6 +10,7 @@ const CLOUD_SCALE_SQLITE_MIGRATION = '20260918140000_cloud_scale_local';
 
 type SqliteNameRow = { name: string };
 type SqliteColumnRow = { name: string };
+type LegacySqliteTableName = 'WeighSession' | 'WeighReading' | 'RmCode';
 type MigrationRow = {
   migration_name: string;
   finished_at: Date | string | null;
@@ -74,7 +75,7 @@ async function getSqliteTableNames(prisma: PrismaClient): Promise<Set<string>> {
 
 async function getSqliteColumns(
   prisma: PrismaClient,
-  tableName: 'WeighSession' | 'WeighReading',
+  tableName: LegacySqliteTableName,
 ): Promise<Set<string>> {
   const rows = await prisma.$queryRawUnsafe<SqliteColumnRow[]>(
     `PRAGMA table_info("${tableName}")`,
@@ -84,7 +85,7 @@ async function getSqliteColumns(
 
 async function addSqliteColumnIfMissing(
   prisma: PrismaClient,
-  tableName: 'WeighSession' | 'WeighReading',
+  tableName: LegacySqliteTableName,
   columns: Set<string>,
   columnName: string,
   definition: string,

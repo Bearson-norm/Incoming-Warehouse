@@ -6,6 +6,8 @@ export interface RmCode {
   cloudId: string;
   vendorId?: number | null;
   vendorCloudId?: string | null;
+  /** Populated by GET /cloud/master-data from vendor join */
+  vendorName?: string | null;
   code: string;
   name?: string | null;
   prodArea?: string | null;

@@ -23,6 +23,23 @@ export class CloudClientService {
 
   constructor(private cloudSettings: CloudSettingsService) {}
 
+  /**
+   * Node's fetch commonly reports only "fetch failed" while the useful
+   * network diagnosis (DNS, TLS, refused connection) is stored in `cause`.
+   * Keep the message concise and never include request headers or body.
+   */
+  private requestErrorMessage(error: unknown): string {
+    if (!(error instanceof Error)) {
+      return String(error);
+    }
+
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause instanceof Error && cause.message && cause.message !== error.message) {
+      return `${error.message}: ${cause.message}`;
+    }
+    return error.message;
+  }
+
   private getBaseUrl(): string {
     const url = this.cloudSettings.getEffective().serverUrl;
     if (!url) {
@@ -101,11 +118,10 @@ export class CloudClientService {
       ) {
         throw error;
       }
-      this.logger.error(
-        `Cloud request failed ${method} ${path}: ${(error as Error).message}`,
-      );
+      const message = this.requestErrorMessage(error);
+      this.logger.error(`Cloud request failed ${method} ${path}: ${message}`);
       throw new ServiceUnavailableException(
-        `Cannot reach cloud server: ${(error as Error).message}`,
+        `Cannot reach cloud server: ${message}`,
       );
     }
   }

@@ -541,7 +541,7 @@ export class ProcessManager {
     }
 
     // Gateway connects to local API
-    const serverUrl = `http://localhost:${this.apiPort}`;
+    const serverUrl = `http://127.0.0.1:${this.apiPort}`;
 
     console.log(`Starting Gateway, connecting to ${serverUrl}...`);
 

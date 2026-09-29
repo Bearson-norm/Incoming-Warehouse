@@ -41,12 +41,18 @@ import { SearchableSelect } from "../SearchableSelect";
 type MasterRow = Vendor | Packaging | RmCode;
 
 function vendorNameForRm(rm: RmCode, vendors: Vendor[]): string {
+  if (rm.vendorName?.trim()) {
+    return rm.vendorName.trim();
+  }
   if (rm.vendorCloudId) {
     const byCloud = vendors.find((v) => v.cloudId === rm.vendorCloudId);
     if (byCloud) return byCloud.name;
   }
   if (rm.vendorId != null) {
-    const byId = vendors.find((v) => v.id === rm.vendorId);
+    const vendorId = Number(rm.vendorId);
+    const byId = vendors.find(
+      (v) => v.id === vendorId || String(v.id) === String(rm.vendorId),
+    );
     if (byId) return byId.name;
   }
   return "—";

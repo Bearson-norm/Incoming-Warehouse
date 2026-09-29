@@ -7,6 +7,8 @@ import { GatewayDeviceConfig, ProcessManager } from './process-manager';
 let mainWindow: BrowserWindow | null = null;
 let configManager: ConfigManager;
 let processManager: ProcessManager;
+let shutdownPromise: Promise<void> | null = null;
+let shutdownComplete = false;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -416,22 +418,31 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('window-all-closed', async () => {
-  // Cleanup processes before quitting
-  if (processManager) {
-    await processManager.cleanup();
-  }
-  
+app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-app.on('before-quit', async () => {
-  // Ensure cleanup on quit
-  if (processManager) {
-    await processManager.cleanup();
+app.on('before-quit', (event) => {
+  // Electron does not await async event handlers. Prevent the first quit,
+  // terminate child services, then explicitly finish quitting. This prevents
+  // the local API from being left behind on port 4123 on Windows.
+  if (shutdownComplete) {
+    return;
   }
+
+  event.preventDefault();
+  if (!shutdownPromise) {
+    shutdownPromise = processManager
+      ? processManager.cleanup()
+      : Promise.resolve();
+  }
+
+  void shutdownPromise.finally(() => {
+    shutdownComplete = true;
+    app.quit();
+  });
 });
 
 // Handle uncaught errors

@@ -4,7 +4,7 @@ import { WeightLivePayload } from '../types/socket';
 const isElectron = typeof window !== 'undefined' && (window as any).electron?.isElectron === true;
 
 const SOCKET_URL = isElectron
-  ? 'http://localhost:4123'
+  ? 'http://127.0.0.1:4123'
   : (import.meta.env.VITE_SOCKET_URL || 'http://localhost:4123');
 
 let socket: Socket | null = null;
