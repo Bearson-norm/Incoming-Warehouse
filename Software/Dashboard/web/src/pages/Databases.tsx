@@ -477,7 +477,12 @@ export default function Databases() {
                         {row.name || "-"}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {row.vendor?.name || "-"}
+                        {row.vendor?.name ||
+                          (row.vendorId != null
+                            ? vendors.find((v) => v.id === row.vendorId)
+                                ?.name
+                            : undefined) ||
+                          "-"}
                       </TableCell>
                       <TableCell className="text-sm">
                         {row.prodArea || "-"}

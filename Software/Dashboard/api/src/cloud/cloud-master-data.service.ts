@@ -378,9 +378,20 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
       }
       for (const rm of snapshot.rmCodes) {
         let vendorId: number | null = null;
-        if (rm.vendorCloudId) {
+        const vendorCloudHint =
+          rm.vendorCloudId ||
+          (rm.vendorId != null
+            ? this.vendorCloudId(snapshot, Number(rm.vendorId))
+            : '');
+        if (vendorCloudHint) {
           const vendor = await tx.vendor.findUnique({
-            where: { cloudId: rm.vendorCloudId },
+            where: { cloudId: vendorCloudHint },
+          });
+          if (vendor) vendorId = vendor.id;
+        }
+        if (vendorId == null && rm.vendorId != null) {
+          const vendor = await tx.vendor.findUnique({
+            where: { id: Number(rm.vendorId) },
           });
           if (vendor) vendorId = vendor.id;
         }

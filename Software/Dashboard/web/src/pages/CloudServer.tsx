@@ -12,13 +12,6 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -41,6 +34,7 @@ import {
 import { CloudScale, CloudStatus, CloudWeighReading } from "../types/weighing";
 import { CloudLpnTrace } from "../components/cloud/CloudLpnTrace";
 import { CloudMasterDataManager } from "../components/cloud/CloudMasterDataManager";
+import { SearchableSelect } from "../components/SearchableSelect";
 
 interface CloudReadingsResponse {
   items: CloudWeighReading[];
@@ -48,6 +42,8 @@ interface CloudReadingsResponse {
   limit: number;
   offset: number;
 }
+
+const PAGE_SIZE = 25;
 
 export default function CloudServer() {
   const { t } = useI18n();
@@ -58,6 +54,7 @@ export default function CloudServer() {
   const [scales, setScales] = useState<CloudScale[]>([]);
   const [readings, setReadings] = useState<CloudWeighReading[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [filterScaleId, setFilterScaleId] = useState("");
@@ -74,7 +71,8 @@ export default function CloudServer() {
         }),
         api.get<CloudReadingsResponse>("/cloud/readings", {
           params: {
-            limit: 100,
+            limit: PAGE_SIZE,
+            offset: (page - 1) * PAGE_SIZE,
             ...(filterScaleId ? { scaleId: Number(filterScaleId) } : {}),
             ...(filterUsername ? { username: filterUsername } : {}),
           },
@@ -92,11 +90,17 @@ export default function CloudServer() {
     } finally {
       setLoading(false);
     }
-  }, [filterScaleId, filterUsername, isAdmin]);
+  }, [filterScaleId, filterUsername, isAdmin, page]);
 
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const setFilter = (setter: (value: string) => void, value: string) => {
+    setPage(1);
+    setter(value);
+  };
 
   const handleCreateScale = async () => {
     const name = newScaleName.trim();
@@ -234,31 +238,20 @@ export default function CloudServer() {
           <CardContent className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1 min-w-[160px]">
               <Label className="text-xs">{t("scale")}</Label>
-              <Select
-                value={filterScaleId || "all"}
-                onValueChange={(v) => setFilterScaleId(v === "all" ? "" : v)}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={t("allScales")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("allScales")}</SelectItem>
-                  {scales
-                    .filter((s) => s.isActive)
-                    .map((scale) => (
-                      <SelectItem key={scale.id} value={String(scale.id)}>
-                        {scale.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterScaleId}
+                onValueChange={(value) => setFilter(setFilterScaleId, value)}
+                options={scales.filter((scale) => scale.isActive).map((scale) => ({ value: String(scale.id), label: scale.name }))}
+                placeholder={t("allScales")}
+                className="h-9"
+              />
             </div>
             {isAdmin && (
               <div className="space-y-1 min-w-[160px]">
                 <Label className="text-xs">{t("username")}</Label>
                 <Input
                   value={filterUsername}
-                  onChange={(e) => setFilterUsername(e.target.value)}
+                  onChange={(e) => setFilter(setFilterUsername, e.target.value)}
                   className="h-9"
                   placeholder={t("username")}
                 />
@@ -404,6 +397,17 @@ export default function CloudServer() {
                 )}
               </TableBody>
             </Table>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#eaded3] pt-4 text-sm">
+            <span className="text-[#8d6e63]">Halaman {page} dari {totalPages}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={loading || page === 1}>
+                Sebelumnya
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={loading || page >= totalPages}>
+                Berikutnya
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

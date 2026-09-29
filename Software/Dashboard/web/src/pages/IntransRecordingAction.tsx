@@ -14,13 +14,7 @@ import WeighingScaleCard from '../components/WeighingScaleCard';
 import WeighingResultCard from '../components/WeighingResultCard';
 import { ConfirmResult, WeighingMethod, WeighSession } from '../types/weighing';
 import { useCloudScales } from '../hooks/useCloudScales';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 export default function IntransRecordingAction() {
   const { t } = useI18n();
@@ -224,24 +218,14 @@ export default function IntransRecordingAction() {
                     </Button>
                   </div>
                 ) : (
-                  <Select
-                    value={scaleId || undefined}
+                  <SearchableSelect
+                    value={scaleId}
                     onValueChange={setScaleId}
                     disabled={isConfigConfirmed || scalesLoading || scales.length === 0}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue
-                        placeholder={scalesLoading ? t('loadingScales') : t('selectScale')}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {scales.map((scale) => (
-                        <SelectItem key={scale.id} value={String(scale.id)}>
-                          {scale.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={scales.map((scale) => ({ value: String(scale.id), label: scale.name }))}
+                    placeholder={scalesLoading ? t('loadingScales') : t('selectScale')}
+                    className="h-10"
+                  />
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">

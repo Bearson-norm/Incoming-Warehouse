@@ -5,13 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
 import { subscribeToWeight } from '../services/socket';
 import { WeightLivePayload } from '../types/socket';
 import api from '../services/api';
@@ -33,6 +26,7 @@ import {
 } from '../types/weighing';
 import { useCloudScales } from '../hooks/useCloudScales';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 function toPrintData(args: {
   lpn: string;
@@ -373,24 +367,14 @@ export default function RecordingAction() {
                     </Button>
                   </div>
                 ) : (
-                  <Select
-                    value={scaleId || undefined}
+                  <SearchableSelect
+                    value={scaleId}
                     onValueChange={setScaleId}
                     disabled={isConfigConfirmed || scalesLoading || scales.length === 0}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue
-                        placeholder={scalesLoading ? t('loadingScales') : t('selectScale')}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {scales.map((scale) => (
-                        <SelectItem key={scale.id} value={String(scale.id)}>
-                          {scale.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={scales.map((scale) => ({ value: String(scale.id), label: scale.name }))}
+                    placeholder={scalesLoading ? t('loadingScales') : t('selectScale')}
+                    className="h-10"
+                  />
                 )}
               </div>
 
@@ -417,65 +401,43 @@ export default function RecordingAction() {
                 <>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-[#5d4037]">{t('vendor')}</Label>
-                    <Select
-                      value={vendorId || undefined}
+                    <SearchableSelect
+                      value={vendorId}
                       onValueChange={(v) => {
                         setVendorId(v);
                         setPackagingId('');
                         setRmCodeId('');
                       }}
                       disabled={isConfigConfirmed}
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder={t('selectVendor')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {vendors.map((vendor) => (
-                          <SelectItem key={vendor.id} value={String(vendor.id)}>
-                            {vendor.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={vendors.map((vendor) => ({ value: String(vendor.id), label: vendor.name }))}
+                      placeholder={t('selectVendor')}
+                      className="h-10"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-[#5d4037]">{t('packaging')}</Label>
-                    <Select
-                      value={packagingId || undefined}
+                    <SearchableSelect
+                      value={packagingId}
                       onValueChange={setPackagingId}
                       disabled={isConfigConfirmed || !vendorId}
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder={t('selectPackaging')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {packingOptions.map((packaging) => (
-                          <SelectItem key={packaging.id} value={String(packaging.id)}>
-                            {packaging.name} ({packaging.tareWeight ?? '-'} kg)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={packingOptions.map((packaging) => ({ value: String(packaging.id), label: `${packaging.name} (${packaging.tareWeight ?? '-'} kg)` }))}
+                      placeholder={t('selectPackaging')}
+                      className="h-10"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-[#5d4037]">{t('rmCode')}</Label>
-                    <Select
-                      value={rmCodeId || undefined}
+                    <SearchableSelect
+                      value={rmCodeId}
                       onValueChange={setRmCodeId}
                       disabled={isConfigConfirmed || !vendorId}
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder={t('selectRmCode')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredRmCodes.map((rm) => (
-                          <SelectItem key={rm.id} value={String(rm.id)}>
-                            {rm.code}
-                            {rm.name ? ` — ${rm.name}` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={filteredRmCodes.map((rm) => ({
+                        value: String(rm.id),
+                        label: `${rm.code}${rm.name ? ` — ${rm.name}` : ''}`,
+                      }))}
+                      placeholder={t('selectRmCode')}
+                      className="h-10"
+                    />
                   </div>
                 </>
               )}

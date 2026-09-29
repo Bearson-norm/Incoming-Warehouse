@@ -28,13 +28,6 @@ import {
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -43,8 +36,21 @@ import {
   TableRow,
 } from "../ui/table";
 import { useI18n } from "../../contexts/I18nContext";
+import { SearchableSelect } from "../SearchableSelect";
 
 type MasterRow = Vendor | Packaging | RmCode;
+
+function vendorNameForRm(rm: RmCode, vendors: Vendor[]): string {
+  if (rm.vendorCloudId) {
+    const byCloud = vendors.find((v) => v.cloudId === rm.vendorCloudId);
+    if (byCloud) return byCloud.name;
+  }
+  if (rm.vendorId != null) {
+    const byId = vendors.find((v) => v.id === rm.vendorId);
+    if (byId) return byId.name;
+  }
+  return "—";
+}
 
 export function CloudMasterDataManager() {
   const { t } = useI18n();
@@ -62,6 +68,8 @@ export function CloudMasterDataManager() {
   const [reason, setReason] = useState("");
   const [history, setHistory] = useState<MasterDataAuditEvent[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [deleting, setDeleting] = useState<{ type: MasterEntityType; row: MasterRow } | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -151,15 +159,19 @@ export function CloudMasterDataManager() {
     }
   };
 
-  const remove = async (type: MasterEntityType, row: MasterRow) => {
-    const deleteReason = window
-      .prompt("Alasan menonaktifkan data ini:")
-      ?.trim();
-    if (!deleteReason || deleteReason.length < 3) return;
+  const remove = async () => {
+    if (!deleting) return;
+    const reason = deleteReason.trim();
+    if (reason.length < 3) {
+      toast.error("Alasan penghapusan minimal 3 karakter.");
+      return;
+    }
     try {
-      await api.delete(`/cloud/master-data/${type}/${row.cloudId}`, {
-        data: { expectedRevision: row.revision, reason: deleteReason },
+      await api.delete(`/cloud/master-data/${deleting.type}/${deleting.row.cloudId}`, {
+        data: { expectedRevision: deleting.row.revision, reason },
       });
+      setDeleting(null);
+      setDeleteReason("");
       toast.success("Data dinonaktifkan; riwayat tetap dipertahankan.");
       await load();
     } catch (error: any) {
@@ -204,7 +216,10 @@ export function CloudMasterDataManager() {
       <Button
         variant="outline"
         size="sm"
-        onClick={() => void remove(type, row)}
+        onClick={() => {
+          setDeleteReason("");
+          setDeleting({ type, row });
+        }}
       >
         <Trash2 className="w-3.5 h-3.5 text-red-600" />
       </Button>
@@ -337,8 +352,7 @@ export function CloudMasterDataManager() {
                   <TableCell className="font-mono">{rm.code}</TableCell>
                   <TableCell>{rm.name || "—"}</TableCell>
                   <TableCell>
-                    {activeVendors.find((v) => v.cloudId === rm.vendorCloudId)
-                      ?.name || "—"}
+                    {vendorNameForRm(rm, activeVendors)}
                   </TableCell>
                   <TableCell>{rm.prodArea || "—"}</TableCell>
                   <TableCell>
@@ -367,18 +381,12 @@ export function CloudMasterDataManager() {
             {(entityType === "packaging" || entityType === "rmCode") && (
               <div>
                 <Label>Vendor</Label>
-                <Select value={vendorCloudId} onValueChange={setVendorCloudId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih vendor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeVendors.map((vendor) => (
-                      <SelectItem key={vendor.cloudId} value={vendor.cloudId}>
-                        {vendor.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={vendorCloudId}
+                  onValueChange={setVendorCloudId}
+                  options={activeVendors.map((vendor) => ({ value: vendor.cloudId, label: vendor.name }))}
+                  placeholder="Ketik nama vendor"
+                />
               </div>
             )}
             {entityType === "rmCode" && (
@@ -441,6 +449,31 @@ export function CloudMasterDataManager() {
               Batal
             </Button>
             <Button onClick={() => void save()}>Simpan</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nonaktifkan data</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {deleting ? `Masukkan alasan untuk menonaktifkan ${deleting.row.name}.` : ""}
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="delete-reason">Alasan</Label>
+            <Input
+              id="delete-reason"
+              value={deleteReason}
+              onChange={(event) => setDeleteReason(event.target.value)}
+              placeholder="Minimal 3 karakter"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleting(null)}>Batal</Button>
+            <Button variant="destructive" onClick={() => void remove()}>Nonaktifkan</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
