@@ -37,25 +37,33 @@ import PrintLabel, { PrintLabelData, printLabelInNewWindow } from '../components
 import { getPrintValidationError } from '../utils/printLabelValidation';
 import { ConfirmResult, parseLabelMetadata, Reading, readingLpn } from '../types/weighing';
 
-function readingToPrintData(reading: Reading, overrides?: { lpn?: string; dateIncoming?: string }): PrintLabelData {
+function readingToPrintData(reading: Reading): PrintLabelData {
   const meta = parseLabelMetadata(reading.session.labelMetadata);
-  const lpn = overrides?.lpn || readingLpn(reading);
-  const dateIncoming =
-    overrides?.dateIncoming ||
-    (typeof meta.dateIncoming === 'string' ? meta.dateIncoming : '');
+  const lpn = readingLpn(reading);
+  const expiredDate =
+    typeof meta.expiredDate === 'string'
+      ? meta.expiredDate
+      : typeof meta.dateIncoming === 'string'
+        ? meta.dateIncoming
+        : '';
   return {
-    vendorName: reading.session.vendor?.name || '',
+    vendorName:
+      reading.session.vendor?.name || String(meta.vendorName || ''),
     packagingName: reading.session.packaging?.name || '',
     tareWeight: reading.tareWeight ?? reading.session.packaging?.tareWeight ?? 0,
     weight: reading.grossWeight ?? reading.weight,
     unit: reading.unit || 'kg',
     capturedAt: reading.capturedAt,
-    referenceOdoo: reading.session.rmCode?.code || String(meta.referenceOdoo || ''),
+    referenceOdoo: String(meta.referenceOdoo || ''),
     batch: String(meta.batch || ''),
     labelProductNumber: lpn,
-    poAdj: String(meta.poAdj || ''),
-    skuName: reading.session.rmCode?.code || String(meta.skuName || ''),
-    dateIncoming,
+    skuName:
+      reading.session.rmCode?.name ||
+      reading.session.rmCode?.code ||
+      String(meta.skuName || ''),
+    skuCode: reading.session.rmCode?.code || undefined,
+    expiredDate,
+    arrivalAt: typeof meta.arrivalAt === 'string' ? meta.arrivalAt : '',
   };
 }
 
@@ -75,7 +83,10 @@ export default function RecordDocuments() {
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [editReading, setEditReading] = useState<Reading | null>(null);
   const [editLpn, setEditLpn] = useState('');
-  const [editDate, setEditDate] = useState('');
+  const [editReferenceOdoo, setEditReferenceOdoo] = useState('');
+  const [editBatch, setEditBatch] = useState('');
+  const [editArrivalAt, setEditArrivalAt] = useState('');
+  const [editExpiredDate, setEditExpiredDate] = useState('');
   const limit = 50;
 
   useEffect(() => {
@@ -115,16 +126,35 @@ export default function RecordDocuments() {
   const openEdit = (reading: Reading) => {
     const meta = parseLabelMetadata(reading.session.labelMetadata);
     setEditReading(reading);
-    setEditLpn(readingLpn(reading));
-    setEditDate(typeof meta.dateIncoming === 'string' ? meta.dateIncoming : '');
+    setEditLpn(readingLpn(reading).toUpperCase());
+    setEditReferenceOdoo(
+      typeof meta.referenceOdoo === 'string' ? meta.referenceOdoo : '',
+    );
+    setEditBatch(typeof meta.batch === 'string' ? meta.batch : '');
+    setEditArrivalAt(typeof meta.arrivalAt === 'string' ? meta.arrivalAt : '');
+    setEditExpiredDate(
+      typeof meta.expiredDate === 'string'
+        ? meta.expiredDate
+        : typeof meta.dateIncoming === 'string'
+          ? meta.dateIncoming
+          : '',
+    );
   };
 
   const saveEdit = async () => {
     if (!editReading) return;
     try {
       await api.patch(`/readings/${editReading.id}/label`, {
-        packageUid: editLpn.trim() || undefined,
-        dateIncoming: editDate || '',
+        packageUid: editLpn.trim().toUpperCase() || undefined,
+        referenceOdoo: editReferenceOdoo.trim(),
+        batch: editBatch.trim(),
+        arrivalAt: editArrivalAt || '',
+        expiredDate: editExpiredDate || '',
+        vendorName: editReading.session.vendor?.name || '',
+        skuName:
+          editReading.session.rmCode?.name ||
+          editReading.session.rmCode?.code ||
+          '',
       });
       toast.success(t('paramsUpdated'));
       setEditReading(null);
@@ -137,6 +167,10 @@ export default function RecordDocuments() {
   const handlePrint = (reading: Reading) => {
     if (reading.session.flowType === 'intrans') {
       toast.error(t('intransNoPrint'));
+      return;
+    }
+    if (reading.session.weighingMethod !== 'internal') {
+      toast.error(t('odooNoPrint'));
       return;
     }
     const data = readingToPrintData(reading);
@@ -287,6 +321,8 @@ export default function RecordDocuments() {
                       <TableHead>{t('weighingMethod')}</TableHead>
                       <TableHead>{t('rmCode')}</TableHead>
                       <TableHead>{t('lpn')}</TableHead>
+                      <TableHead>{t('batch')}</TableHead>
+                      <TableHead>{t('expiredDate')}</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">{t('gross')}</TableHead>
                       <TableHead className="text-right">{t('tare')}</TableHead>
@@ -299,12 +335,21 @@ export default function RecordDocuments() {
                     {readings.map((reading) => {
                       const gross = reading.grossWeight ?? reading.weight;
                       const tare =
-                        reading.tareWeight ?? reading.session.packaging?.tareWeight ?? 0;
-                      const net = reading.netWeight ?? gross - tare;
+                        reading.tareWeight ?? reading.session.packaging?.tareWeight ?? null;
+                      const net =
+                        reading.netWeight ?? (tare == null ? null : gross - tare);
                       const lpn = readingLpn(reading) || '-';
+                      const metadata = parseLabelMetadata(reading.session.labelMetadata);
+                      const rowBatch = typeof metadata.batch === 'string' ? metadata.batch : '-';
+                      const rowExpiredDate =
+                        typeof metadata.expiredDate === 'string'
+                          ? metadata.expiredDate
+                          : typeof metadata.dateIncoming === 'string'
+                            ? metadata.dateIncoming
+                            : '-';
                       const status = reading.weightStatus?.toUpperCase() || '-';
                       const canSend =
-                        reading.session.weighingMethod === 'internal' && !reading.odooLogId;
+                        reading.weightStatus?.toLowerCase() === 'local' && !reading.odooLogId;
 
                       return (
                         <TableRow key={reading.id}>
@@ -320,15 +365,19 @@ export default function RecordDocuments() {
                               ? t('methodInternal')
                               : t('methodOdoo')}
                           </TableCell>
-                          <TableCell className="text-sm font-mono">
-                            {reading.session.rmCode?.code || '-'}
+                          <TableCell className="text-sm">
+                            {reading.session.rmCode?.name || reading.session.rmCode?.code || '-'}
                           </TableCell>
                           <TableCell className="text-sm font-mono break-all">{lpn}</TableCell>
+                          <TableCell className="text-sm font-mono">{rowBatch}</TableCell>
+                          <TableCell className="text-sm">{rowExpiredDate}</TableCell>
                           <TableCell className="text-sm font-semibold">{status}</TableCell>
                           <TableCell className="text-right text-sm">{gross.toFixed(2)}</TableCell>
-                          <TableCell className="text-right text-sm">{Number(tare).toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-sm">
+                            {tare == null ? '-' : Number(tare).toFixed(2)}
+                          </TableCell>
                           <TableCell className="text-right text-sm font-semibold">
-                            {Number(net).toFixed(2)}
+                            {net == null ? '-' : Number(net).toFixed(2)}
                           </TableCell>
                           <TableCell className="text-sm">
                             {reading.odooLogId ? t('sentToOdoo') : t('localOnly')}
@@ -343,7 +392,8 @@ export default function RecordDocuments() {
                               >
                                 <Pencil className="w-3 h-3" />
                               </Button>
-                              {reading.session.flowType !== 'intrans' && (
+                              {reading.session.flowType !== 'intrans' &&
+                                reading.session.weighingMethod === 'internal' && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -425,11 +475,43 @@ export default function RecordDocuments() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>{t('lpn')}</Label>
-              <Input className="font-mono" value={editLpn} onChange={(e) => setEditLpn(e.target.value)} />
+              <Input
+                className="font-mono"
+                value={editLpn}
+                onChange={(e) => setEditLpn(e.target.value.toUpperCase())}
+              />
             </div>
             <div className="space-y-2">
-              <Label>{t('dateIncoming')}</Label>
-              <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+              <Label>{t('referenceOdoo')}</Label>
+              <Input
+                className="font-mono"
+                value={editReferenceOdoo}
+                onChange={(e) => setEditReferenceOdoo(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('batch')}</Label>
+              <Input
+                className="font-mono"
+                value={editBatch}
+                onChange={(e) => setEditBatch(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('arrivalDate')}</Label>
+              <Input
+                type="date"
+                value={editArrivalAt}
+                onChange={(e) => setEditArrivalAt(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('bestBeforeDate')}</Label>
+              <Input
+                type="date"
+                value={editExpiredDate}
+                onChange={(e) => setEditExpiredDate(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter>

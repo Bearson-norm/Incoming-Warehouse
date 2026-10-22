@@ -20,7 +20,15 @@ curl -s http://127.0.0.1:4123/api/health
 curl -s http://wis.moof-set.web.id/api/health   # via host nginx
 ```
 
-Migrasi dan seed admin awal dijalankan otomatis saat container `api` start.
+Migrasi dijalankan otomatis saat container `api` start. **Master RM** (`data/rm-sku-inbound.csv` di image API) ikut disinkronkan ke PostgreSQL jika isi CSV berubah setelah `docker compose up -d --build` (hash disimpan di tabel `_SeedMeta`). Restart tanpa rebuild CSV → tidak menulis ulang DB.
+
+```bash
+git pull
+cd Software/infra
+./scripts/deploy-cloud.sh   # atau: docker compose up -d --build
+```
+
+Paksa ulang tanpa ubah CSV: `Software/infra/scripts/seed-rm-sku-mount.sh` (set `RM_SKU_FORCE=1`). Matikan auto-sync: `RM_SKU_SYNC_ON_START=0` di `.env`.
 
 ## Services
 

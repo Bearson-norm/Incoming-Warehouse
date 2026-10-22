@@ -69,7 +69,6 @@ export default function RecordDocuments() {
         config,
         record,
         skuName: record.skuName || record.packagingType,
-        poAdj: record.poAdj || '',
         dateIncoming: record.dateIncoming || '',
         qty: record.qty || 0,
       });

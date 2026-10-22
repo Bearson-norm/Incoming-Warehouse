@@ -294,13 +294,18 @@ class WeighingGateway {
     if (result !== null) {
       // Berat diterima dalam gram, konversi ke kg untuk payload
       const weightKg = result.unit === 'g' ? result.weight / 1000 : result.weight;
-      this.processWeightData(weightKg, result.stable, trimmed);
+      this.processWeightData(weightKg, result.stable, trimmed, result.stabilityKnown ?? true);
     }
     // Jika tidak bisa di-parse, tidak log error (passive listener)
   }
 
 
-  private processWeightData(weight: number, stable: boolean, rawLine: string) {
+  private processWeightData(
+    weight: number,
+    stable: boolean,
+    rawLine: string,
+    stabilityKnown: boolean = true,
+  ) {
     console.log(`⚖️  Parsed weight: ${weight} kg (stable: ${stable})`);
 
     const payload: WeightUpdatePayload = {
@@ -312,6 +317,27 @@ class WeighingGateway {
       rawLine,
       capturedAt: new Date().toISOString(),
     };
+
+    // Some indicators only stream a numeric value and unit (for example
+    // "12.34 kg") without an ST/US flag. For those devices, treat an
+    // unchanged reading as stable after the configured stability window.
+    if (!stabilityKnown) {
+      if (this.lastStableWeight && this.lastStableWeight.weight === weight) {
+        const timeSinceUnchanged = Date.now() - this.lastStableWeight.timestamp;
+        if (timeSinceUnchanged >= this.config.stable.windowMs) {
+          payload.stable = true;
+          console.log(`Sending software-stable weight: ${weight} kg`);
+          this.sendWeightUpdate(payload);
+          return;
+        }
+      } else {
+        this.lastStableWeight = { weight, timestamp: Date.now() };
+      }
+
+      payload.stable = false;
+      this.sendWeightUpdate(payload);
+      return;
+    }
 
     // Check if weight is stable for the configured window
     if (stable) {
@@ -342,7 +368,7 @@ class WeighingGateway {
    * 
    * Return: { weight: gram, unit: 'g', stable: boolean } atau null
    */
-  private parseWeightSmart(raw: string): { weight: number; unit: string; stable: boolean; originalUnit?: string } | null {
+  private parseWeightSmart(raw: string): { weight: number; unit: string; stable: boolean; stabilityKnown?: boolean; originalUnit?: string } | null {
     try {
       // 1. Pembersihan data
       let cleaned = raw.replace(/[\r\n]/g, '').trim();
@@ -397,9 +423,11 @@ class WeighingGateway {
         // Validasi
         if (isNaN(grams) || Math.abs(grams) > 100000) return null;
 
-        const stable = this.isStable(cleaned);
+        const unstable = this.isUnstable(cleaned);
+        const stable = !unstable && this.isStable(cleaned);
+        const stabilityKnown = unstable || stable;
         console.log(`⚖️  Generic: ${cleaned} → ${grams}g (stable: ${stable})`);
-        return { weight: grams, unit: 'g', stable, originalUnit: unit };
+        return { weight: grams, unit: 'g', stable, stabilityKnown, originalUnit: unit };
       }
 
       return null;
@@ -488,12 +516,16 @@ class WeighingGateway {
 
   private isStable(data: string): boolean {
     const stableRegex = new RegExp(this.config.stable.pattern, 'i');
-    const unstableRegex = new RegExp(this.config.stable.unstablePattern, 'i');
 
-    if (unstableRegex.test(data)) {
+    if (this.isUnstable(data)) {
       return false;
     }
     return stableRegex.test(data);
+  }
+
+  private isUnstable(data: string): boolean {
+    const unstableRegex = new RegExp(this.config.stable.unstablePattern, 'i');
+    return unstableRegex.test(data);
   }
 
   private sendWeightUpdate(payload: WeightUpdatePayload) {

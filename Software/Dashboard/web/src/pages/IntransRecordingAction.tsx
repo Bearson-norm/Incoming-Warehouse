@@ -15,6 +15,7 @@ import WeighingResultCard from '../components/WeighingResultCard';
 import { ConfirmResult, WeighingMethod, WeighSession } from '../types/weighing';
 import { useCloudScales } from '../hooks/useCloudScales';
 import { SearchableSelect } from '../components/SearchableSelect';
+import OdooLocalFallbackDialog from '../components/OdooLocalFallbackDialog';
 
 export default function IntransRecordingAction() {
   const { t } = useI18n();
@@ -27,6 +28,7 @@ export default function IntransRecordingAction() {
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [lastResult, setLastResult] = useState<ConfirmResult | null>(null);
+  const [odooFailure, setOdooFailure] = useState<string | null>(null);
   const {
     scales,
     scaleId,
@@ -110,6 +112,23 @@ export default function IntransRecordingAction() {
     }
   };
 
+  const completeWeighing = (result: ConfirmResult) => {
+    setLastResult(result);
+    const status = result.weightStatus?.toLowerCase();
+    if (status === 'pass') {
+      toast.success(t('weightPass') + ': ' + (result.message || ''));
+    } else if (status === 'local') {
+      toast.success(t('savedLocally'));
+    } else {
+      toast.warning(t('weightFail') + ': ' + (result.message || ''));
+    }
+    setOdooFailure(null);
+    setSession(null);
+    setIsWeighing(false);
+    setIsConfigConfirmed(false);
+    setPackageUid('');
+  };
+
   const handleConfirmWeighing = async () => {
     if (!currentWeight?.stable || !session) {
       toast.error(t('waitForStableWeight'));
@@ -120,24 +139,36 @@ export default function IntransRecordingAction() {
       const response = await api.post<ConfirmResult>('/weighings/confirm', {
         sessionId: session.id,
       });
-      setLastResult(response.data);
-      const status = response.data.weightStatus?.toLowerCase();
-      if (status === 'pass') {
-        toast.success(t('weightPass') + ': ' + (response.data.message || ''));
-      } else if (status === 'local') {
-        toast.success(t('savedLocally'));
+      completeWeighing(response.data);
+    } catch (error: any) {
+      const msg =
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          'Gagal menyimpan penimbangan';
+      if (method === 'odoo') {
+        setOdooFailure(msg);
       } else {
-        toast.warning(t('weightFail') + ': ' + (response.data.message || ''));
+        toast.error(msg);
       }
-      setSession(null);
-      setIsWeighing(false);
-      setIsConfigConfirmed(false);
-      setPackageUid('');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const handleSaveLocalFallback = async () => {
+    if (!session) return;
+    setConfirming(true);
+    try {
+      const response = await api.post<ConfirmResult>('/weighings/confirm', {
+        sessionId: session.id,
+        saveLocally: true,
+      });
+      completeWeighing(response.data);
     } catch (error: any) {
       toast.error(
         error.response?.data?.message ||
           error.response?.data?.error ||
-          'Gagal menyimpan penimbangan',
+          'Gagal menyimpan penimbangan secara lokal',
       );
     } finally {
       setConfirming(false);
@@ -181,10 +212,18 @@ export default function IntransRecordingAction() {
       {lastResult && !isConfigConfirmed && (
         <WeighingResultCard
           result={lastResult}
-          onSendToOdoo={lastResult.weighingMethod === 'internal' ? handleSendToOdoo : undefined}
+          onSendToOdoo={!lastResult.syncedToOdoo ? handleSendToOdoo : undefined}
           sending={sending}
         />
       )}
+
+      <OdooLocalFallbackDialog
+        open={!!odooFailure}
+        error={odooFailure || ''}
+        saving={confirming}
+        onCancel={() => setOdooFailure(null)}
+        onSaveLocal={handleSaveLocalFallback}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">

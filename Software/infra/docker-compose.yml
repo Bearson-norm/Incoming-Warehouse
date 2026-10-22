@@ -31,6 +31,8 @@ services:
       ODOO_BASE_URL: ${ODOO_BASE_URL:-}
       ODOO_IOT_API_KEY: ${ODOO_IOT_API_KEY:-}
       CLOUD_SYNC_API_KEY: ${CLOUD_SYNC_API_KEY:?set CLOUD_SYNC_API_KEY in .env}
+      # After rebuild: sync RmCode from image data/rm-sku-inbound.csv when file hash changes
+      RM_SKU_SYNC_ON_START: ${RM_SKU_SYNC_ON_START:-1}
     ports:
       - "127.0.0.1:4123:4123"
     depends_on:

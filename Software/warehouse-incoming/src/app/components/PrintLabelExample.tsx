@@ -49,7 +49,6 @@ export const PrintLabelExample: React.FC = () => {
     config: exampleConfig,
     record: exampleRecord,
     skuName: 'STICKER ICY GRAPE (30ML)',
-    poAdj: 'P11469',
     dateIncoming: '2026-01-19',
     qty: 2500,
   };

@@ -284,19 +284,10 @@ export function CloudMasterDataManager() {
   const filteredRmCodes = useMemo(() => {
     return [...activeRmCodes]
       .filter((rm) => {
-        const vendor = resolveVendorLabel(activeVendors, rm);
-        const haystack = [rm.code, rm.name || "", vendor, rm.prodArea || ""].join(
-          " ",
-        );
+        const haystack = [rm.code, rm.name || "", rm.prodArea || ""].join(" ");
         return matchesQuery(haystack, rmQuery);
       })
-      .sort((a, b) => {
-        const va = resolveVendorLabel(activeVendors, a);
-        const vb = resolveVendorLabel(activeVendors, b);
-        const byVendor = va.localeCompare(vb);
-        if (byVendor !== 0) return byVendor;
-        return a.code.localeCompare(b.code);
-      });
+      .sort((a, b) => a.code.localeCompare(b.code));
   }, [activeRmCodes, activeVendors, rmQuery]);
   const actions = (type: MasterEntityType, row: MasterRow) => (
     <div className="flex justify-end gap-1">
@@ -470,7 +461,7 @@ export function CloudMasterDataManager() {
         <section>
           <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
             <h3 className="font-semibold">
-              Daftar kode RM{" "}
+              Daftar nama SKU{" "}
               <span className="text-xs font-normal text-[#8d6e63]">
                 ({filteredRmCodes.length}/{activeRmCodes.length})
               </span>
@@ -482,7 +473,7 @@ export function CloudMasterDataManager() {
           <Input
             value={rmQuery}
             onChange={(e) => setRmQuery(e.target.value)}
-            placeholder="Cari kode, nama, vendor, prod area…"
+            placeholder="Cari kode, nama, prod area…"
             className="mb-2 max-w-md h-9 bg-white"
           />
           <div className="max-h-[420px] overflow-auto rounded-md border border-[#d7ccc8]">
@@ -490,8 +481,7 @@ export function CloudMasterDataManager() {
               <TableHeader className="sticky top-0 bg-[#fff8f0] z-10">
                 <TableRow>
                   <TableHead className="w-[100px]">Kode</TableHead>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>Vendor</TableHead>
+                  <TableHead>Nama SKU</TableHead>
                   <TableHead className="w-[90px]">Area</TableHead>
                   <TableHead />
                 </TableRow>
@@ -499,8 +489,8 @@ export function CloudMasterDataManager() {
               <TableBody>
                 {filteredRmCodes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-sm text-[#8d6e63] py-6">
-                      Tidak ada kode RM yang cocok.
+                    <TableCell colSpan={4} className="text-center text-sm text-[#8d6e63] py-6">
+                      Tidak ada nama SKU yang cocok.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -509,11 +499,8 @@ export function CloudMasterDataManager() {
                       <TableCell className="font-mono text-sm font-medium">
                         {rm.code}
                       </TableCell>
-                      <TableCell className="text-sm max-w-[240px] truncate" title={rm.name || ""}>
+                      <TableCell className="text-sm max-w-[320px] truncate" title={rm.name || ""}>
                         {rm.name || "—"}
-                      </TableCell>
-                      <TableCell className="text-sm max-w-[200px]">
-                        {resolveVendorLabel(activeVendors, rm)}
                       </TableCell>
                       <TableCell className="text-sm">{rm.prodArea || "—"}</TableCell>
                       <TableCell>{actions("rmCode", rm)}</TableCell>
@@ -534,7 +521,7 @@ export function CloudMasterDataManager() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {(entityType === "packaging" || entityType === "rmCode") && (
+            {entityType === "packaging" && (
               <div>
                 <Label>Vendor</Label>
                 <SearchableSelect
@@ -555,7 +542,7 @@ export function CloudMasterDataManager() {
               </div>
             )}
             <div>
-              <Label>Nama</Label>
+              <Label>{entityType === "rmCode" ? "Nama SKU" : "Nama"}</Label>
               <Input
                 value={name}
                 onChange={(event) => setName(event.target.value)}

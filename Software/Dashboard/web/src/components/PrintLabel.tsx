@@ -1,6 +1,10 @@
 import React from 'react';
 import QRCode from 'react-qr-code';
-import { loadPrintLabelConfig, PrintLabelConfig } from '../utils/printLabelConfig';
+import {
+  formatPrintPageSize,
+  loadPrintLabelConfig,
+  PrintLabelConfig,
+} from '../utils/printLabelConfig';
 import logoFoomHitam from '../assets/logo-foom-hitam.jpg';
 
 /**
@@ -17,16 +21,27 @@ export interface PrintLabelData {
   referenceOdoo: string;
   batch: string;
   labelProductNumber: string;
-  poAdj: string;
   skuName: string;
-  /** ISO / datetime-local — tanggal & waktu untuk baris "Date Incoming / Best Before" di tabel cetak */
-  dateIncoming: string;
+  /** QR SKU value; defaults to skuName when omitted. */
+  skuCode?: string;
+  /** ISO date for the product expiration date. */
+  expiredDate: string;
   /** Tanggal & waktu kedatangan (ISO atau datetime-local) untuk header "Tanggal Kedatangan" */
   arrivalAt?: string;
 }
 
 function formatLabelDateTime(d: Date): string {
   return `${d.getDate().toString().padStart(2, '0')}-${d.toLocaleString('en-US', { month: 'short' })}-${d.getFullYear()} ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+}
+
+function formatLabelDate(raw: string): string {
+  const value = raw.trim();
+  if (!value) return '-';
+  const [year, month, day] = value.split('-').map(Number);
+  if (year && month && day) {
+    return `${String(day).padStart(2, '0')}-${new Date(year, month - 1, day).toLocaleString('en-US', { month: 'short' })}-${year}`;
+  }
+  return value;
 }
 
 /** Nilai dari input datetime-local atau ISO; jika tidak ter-parse, tampilkan teks apa adanya. */
@@ -48,6 +63,14 @@ interface PrintLabelProps {
 /* Generate CSS dari konfigurasi                */
 /* ============================================ */
 export function generateLabelCSS(cfg: PrintLabelConfig): string {
+  const compact =
+    cfg.paperHeight > 0 && cfg.paperHeight <= 85;
+  const sectionGap = compact ? 4 : 8;
+  const titleMargin = compact ? '3px 0 2px 0' : '6px 0 4px 0';
+  const productMargin = compact ? '0 0 4px 0' : '0 0 8px 0';
+  const tableCellPad = compact ? '2px 4px' : '4px 6px';
+  const qrRowMargin = compact ? 4 : 8;
+
   return `
   .label-card {
     background-color: #FFFFFF;
@@ -67,9 +90,9 @@ export function generateLabelCSS(cfg: PrintLabelConfig): string {
     justify-content: space-between;
     align-items: flex-start;
     gap: 4mm;
-    margin-bottom: 8px;
+    margin-bottom: ${sectionGap}px;
     border-bottom: 1px solid #000;
-    padding-bottom: 6px;
+    padding-bottom: ${compact ? 4 : 6}px;
   }
 
   .label-header-dates {
@@ -104,7 +127,7 @@ export function generateLabelCSS(cfg: PrintLabelConfig): string {
     font-weight: 800;
     font-family: 'Arial Black', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     letter-spacing: 0.04em;
-    margin: 6px 0 4px 0;
+    margin: ${titleMargin};
   }
 
   .label-product-number {
@@ -113,30 +136,22 @@ export function generateLabelCSS(cfg: PrintLabelConfig): string {
     font-weight: 800;
     font-family: 'Arial Black', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     border: 2px solid #000;
-    padding: 5px 8px;
-    margin: 0 0 8px 0;
+    padding: ${compact ? '3px 6px' : '5px 8px'};
+    margin: ${productMargin};
     word-break: break-all;
     line-height: 1.3;
-  }
-
-  .label-po {
-    font-size: ${cfg.poAdjFontSize}px;
-    font-weight: 700;
-    font-family: 'Arial Black', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    margin-bottom: 6px;
-    padding-left: 2px;
   }
 
   .label-table {
     width: 100%;
     border-collapse: collapse;
     font-size: ${cfg.tableValueFontSize}px;
-    margin-bottom: 8px;
+    margin-bottom: ${sectionGap}px;
   }
 
   .label-table td {
     border: 1.5px solid #000;
-    padding: 4px 6px;
+    padding: ${tableCellPad};
     vertical-align: top;
     line-height: 1.3;
   }
@@ -163,7 +178,7 @@ export function generateLabelCSS(cfg: PrintLabelConfig): string {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-top: 8px;
+    margin-top: ${qrRowMargin}px;
     padding: 0 4px;
   }
 
@@ -210,8 +225,15 @@ export function printLabelInNewWindow(): boolean {
   const cfg = loadPrintLabelConfig();
   const css = generateLabelCSS(cfg);
 
-  const pageWidth = cfg.paperWidth;
-  const pageHeight = cfg.paperHeight > 0 ? cfg.paperHeight : pageWidth * 1.4;
+  const pageWidth = cfg.paperLandscape
+    ? cfg.paperMediaHeight
+    : cfg.paperWidth;
+  const pageHeight = cfg.paperLandscape
+    ? cfg.paperMediaWidth
+    : cfg.paperHeight > 0
+      ? cfg.paperHeight
+      : cfg.paperWidth * 1.4;
+  const pageSize = formatPrintPageSize(cfg);
 
   const printWindow = window.open('', '_blank', `width=${Math.round(pageWidth * 3.78 + 100)},height=${Math.round(pageHeight * 3.78 + 100)}`);
   if (!printWindow) return false;
@@ -231,7 +253,7 @@ export function printLabelInNewWindow(): boolean {
             background: #fff;
           }
           @page {
-            size: ${pageWidth}mm ${cfg.paperHeight > 0 ? cfg.paperHeight + 'mm' : 'auto'};
+            size: ${pageSize};
             margin: 0;
           }
           @media print {
@@ -296,13 +318,12 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data, configOverride }) 
     tareWeight,
     weight,
     unit,
-    capturedAt,
     referenceOdoo,
     batch,
     labelProductNumber,
-    poAdj,
     skuName,
-    dateIncoming,
+    skuCode,
+    expiredDate,
     arrivalAt,
   } = data;
 
@@ -310,27 +331,24 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data, configOverride }) 
   const weightInGrams = unit === 'kg' ? weight * 1000 : weight;
   const tareWeightInGrams = unit === 'kg' ? tareWeight * 1000 : tareWeight;
   const netWeightInGrams = weightInGrams - tareWeightInGrams;
+  const nettoQrValue = netWeightInGrams.toFixed(2);
 
   // Format tanggal print
   const now = new Date();
   const printDate = formatLabelDateTime(now);
 
-  const capturedDate = new Date(capturedAt);
+  const arrivalDate = formatLabelDate(arrivalAt || '');
 
-  // Tanggal kedatangan di header: dari arrivalAt bila ada, selain itu dari waktu penimbangan
-  const arrivalDateTime = (() => {
-    if (arrivalAt) {
-      const d = new Date(arrivalAt);
-      if (!Number.isNaN(d.getTime())) return formatLabelDateTime(d);
-    }
-    return formatLabelDateTime(capturedDate);
-  })();
-
-  const bestBeforePrint = formatBestBeforeForPrint(dateIncoming);
+  const expiredDatePrint = formatBestBeforeForPrint(expiredDate);
 
   // QR code values - pastikan tidak kosong
   const lpnValue = (labelProductNumber && labelProductNumber.trim() !== '' && labelProductNumber !== '-') ? labelProductNumber : 'LPN-N/A';
-  const skuValue = (skuName && skuName.trim() !== '' && skuName !== 'N/A') ? skuName : ((packagingName && packagingName.trim() !== '') ? packagingName : 'SKU-N/A');
+  const skuDisplay =
+    (skuName && skuName.trim() !== '' && skuName !== 'N/A')
+      ? skuName
+      : ((packagingName && packagingName.trim() !== '') ? packagingName : 'SKU-N/A');
+  const skuQrValue =
+    (skuCode && skuCode.trim() !== '') ? skuCode.trim() : skuDisplay;
   const batchValue = (batch && batch.trim() !== '' && batch !== '-') ? batch : 'BATCH-N/A';
 
   const labelCSS = generateLabelCSS(cfg);
@@ -344,7 +362,7 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data, configOverride }) 
         <div className="label-header">
           <div className="label-header-dates">
             <div>Tanggal Print : {printDate}</div>
-            <div>Tanggal Kedatangan : {arrivalDateTime}</div>
+            <div>Tanggal Kedatangan : {arrivalDate}</div>
           </div>
           <div className="label-logo">
             <img src={logoFoomHitam} alt="FOOM" className="label-logo-img" />
@@ -357,15 +375,12 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data, configOverride }) 
           {lpnValue}
         </div>
 
-        {/* === PO / Adj === */}
-        <div className="label-po">PO / Adj&nbsp;&nbsp;&nbsp;&nbsp;: {(poAdj && poAdj.trim() !== '' && poAdj !== '-') ? poAdj : 'N/A'}</div>
-
         {/* === TABLE INFO === */}
         <table className="label-table">
           <tbody>
             <tr>
               <td className="td-label">Sku Name</td>
-              <td className="td-value">{skuValue}</td>
+              <td className="td-value">{skuDisplay}</td>
               <td className="td-label">Batch</td>
               <td className="td-value">{batchValue}</td>
             </tr>
@@ -373,7 +388,7 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data, configOverride }) 
               <td className="td-label">Name Vendor</td>
               <td className="td-value">{(vendorName && vendorName.trim() !== '' && vendorName !== 'N/A') ? vendorName : 'Vendor N/A'}</td>
               <td className="td-label">Date Incoming / Best Before</td>
-              <td className="td-value">{bestBeforePrint}</td>
+              <td className="td-value">{expiredDatePrint}</td>
             </tr>
             <tr>
               <td className="td-label">Reference Odoo</td>
@@ -397,15 +412,15 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data, configOverride }) 
           </div>
           <div className="label-qr-item">
             <div className="label-qr-box">
-              <QRCode value={skuValue} size={cfg.qrSize} level="M" />
+              <QRCode value={skuQrValue} size={cfg.qrSize} level="M" />
             </div>
             <div className="label-qr-tag">SKU</div>
           </div>
           <div className="label-qr-item">
             <div className="label-qr-box">
-              <QRCode value={batchValue} size={cfg.qrSize} level="M" />
+              <QRCode value={nettoQrValue} size={cfg.qrSize} level="M" />
             </div>
-            <div className="label-qr-tag">BATCH</div>
+            <div className="label-qr-tag">NETTO</div>
           </div>
         </div>
       </div>
@@ -428,36 +443,30 @@ export const LabelPreview: React.FC<PrintLabelProps> = ({ data, configOverride }
     tareWeight,
     weight,
     unit,
-    capturedAt,
     referenceOdoo,
     batch,
     labelProductNumber,
-    poAdj,
     skuName,
-    dateIncoming,
+    skuCode,
+    expiredDate,
     arrivalAt,
   } = data;
 
   const weightInGrams = unit === 'kg' ? weight * 1000 : weight;
   const tareWeightInGrams = unit === 'kg' ? tareWeight * 1000 : tareWeight;
   const netWeightInGrams = weightInGrams - tareWeightInGrams;
+  const nettoQrValue = netWeightInGrams.toFixed(2);
 
   const now = new Date();
   const printDate = formatLabelDateTime(now);
 
-  const capturedDate = new Date(capturedAt);
-  const arrivalDateTime = (() => {
-    if (arrivalAt) {
-      const d = new Date(arrivalAt);
-      if (!Number.isNaN(d.getTime())) return formatLabelDateTime(d);
-    }
-    return formatLabelDateTime(capturedDate);
-  })();
+  const arrivalDate = formatLabelDate(arrivalAt || '');
 
-  const bestBeforePrint = formatBestBeforeForPrint(dateIncoming);
+  const expiredDatePrint = formatBestBeforeForPrint(expiredDate);
 
   const lpnValue = labelProductNumber || 'N/A';
-  const skuValue = skuName || packagingName || 'N/A';
+  const skuDisplay = skuName || packagingName || 'N/A';
+  const skuQrValue = (skuCode && skuCode.trim() !== '') ? skuCode.trim() : skuDisplay;
   const batchValue = batch || 'N/A';
   const labelCSS = generateLabelCSS(cfg);
 
@@ -468,7 +477,7 @@ export const LabelPreview: React.FC<PrintLabelProps> = ({ data, configOverride }
         <div className="label-header">
           <div className="label-header-dates">
             <div>Tanggal Print : {printDate}</div>
-            <div>Tanggal Kedatangan : {arrivalDateTime}</div>
+            <div>Tanggal Kedatangan : {arrivalDate}</div>
           </div>
           <div className="label-logo">
             <img src={logoFoomHitam} alt="FOOM" className="label-logo-img" />
@@ -480,13 +489,11 @@ export const LabelPreview: React.FC<PrintLabelProps> = ({ data, configOverride }
           {labelProductNumber || '-'}
         </div>
 
-        <div className="label-po">PO / Adj&nbsp;&nbsp;&nbsp;&nbsp;: {poAdj || '-'}</div>
-
         <table className="label-table">
           <tbody>
             <tr>
               <td className="td-label">Sku Name</td>
-              <td className="td-value">{skuValue}</td>
+              <td className="td-value">{skuDisplay}</td>
               <td className="td-label">Batch</td>
               <td className="td-value">{batchValue}</td>
             </tr>
@@ -494,7 +501,7 @@ export const LabelPreview: React.FC<PrintLabelProps> = ({ data, configOverride }
               <td className="td-label">Name Vendor</td>
               <td className="td-value">{vendorName}</td>
               <td className="td-label">Date Incoming / Best Before</td>
-              <td className="td-value">{bestBeforePrint}</td>
+              <td className="td-value">{expiredDatePrint}</td>
             </tr>
             <tr>
               <td className="td-label">Reference Odoo</td>
@@ -517,15 +524,15 @@ export const LabelPreview: React.FC<PrintLabelProps> = ({ data, configOverride }
           </div>
           <div className="label-qr-item">
             <div className="label-qr-box">
-              <QRCode value={skuValue} size={cfg.qrSize} level="M" />
+              <QRCode value={skuQrValue} size={cfg.qrSize} level="M" />
             </div>
             <div className="label-qr-tag">SKU</div>
           </div>
           <div className="label-qr-item">
             <div className="label-qr-box">
-              <QRCode value={batchValue} size={cfg.qrSize} level="M" />
+              <QRCode value={nettoQrValue} size={cfg.qrSize} level="M" />
             </div>
-            <div className="label-qr-tag">BATCH</div>
+            <div className="label-qr-tag">NETTO</div>
           </div>
         </div>
       </div>

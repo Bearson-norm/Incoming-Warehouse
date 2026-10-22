@@ -17,5 +17,29 @@ export class UpdateReadingLabelDto {
 
   @IsOptional()
   @IsString()
-  dateIncoming?: string;
+  expiredDate?: string;
+
+  @IsOptional()
+  @IsString()
+  arrivalAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  referenceOdoo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  vendorName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  skuName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  batch?: string;
 }

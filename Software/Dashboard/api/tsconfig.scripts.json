@@ -11,7 +11,10 @@
   },
   "include": [
     "scripts/import-products-csv.ts",
+    "scripts/replace-rm-codes-csv.ts",
     "scripts/import-tare-packagings-csv.ts",
+    "scripts/lib/parse-rm-sku-csv.ts",
+    "scripts/lib/rm-sku-seed-meta.ts",
     "scripts/lib/parse-products-csv.ts",
     "scripts/lib/parse-tare-jerrycan-csv.ts",
     "scripts/lib/resolve-tare-vendor.ts"

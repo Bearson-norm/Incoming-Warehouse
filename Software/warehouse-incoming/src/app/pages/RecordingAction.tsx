@@ -159,7 +159,6 @@ export default function RecordingAction() {
         config,
         record,
         skuName: skuName || config.packaging.type,
-        poAdj,
         dateIncoming,
         qty,
       });

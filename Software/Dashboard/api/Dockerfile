@@ -36,7 +36,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist-scripts ./dist-scripts
 COPY --from=builder /app/data ./data
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 4123
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start:prod"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

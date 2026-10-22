@@ -43,7 +43,8 @@ docker_api_run_prepare() {
   fi
 
   if [[ ! -f "$API/dist-scripts/scripts/import-products-csv.js" ]] \
-    || [[ ! -f "$API/dist-scripts/scripts/import-tare-packagings-csv.js" ]]; then
+    || [[ ! -f "$API/dist-scripts/scripts/import-tare-packagings-csv.js" ]] \
+    || [[ ! -f "$API/dist-scripts/scripts/replace-rm-codes-csv.js" ]]; then
     echo "[seed] Compiling seed scripts..."
     (cd "$API" && npm run build:scripts)
   fi
@@ -58,6 +59,11 @@ run_in_api_network() {
   docker compose run --rm --no-deps \
     -e DATABASE_URL \
     -e NODE_PATH=/workspace/node_modules \
+    -e RM_SKU_FORCE \
+    -e RM_SKU_CSV \
+    -e DRY_RUN \
+    -e RM_REPLACE_REASON \
+    -e RM_REPLACE_ACTOR \
     -v "$DOCKER_API_API:/workspace/api:ro" \
     -v "$DOCKER_API_WS_NODE:/workspace/node_modules:ro" \
     -w /workspace/api \

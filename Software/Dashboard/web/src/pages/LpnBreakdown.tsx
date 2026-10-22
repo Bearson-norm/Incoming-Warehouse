@@ -117,7 +117,9 @@ export default function LpnBreakdown() {
             <CardContent className="px-6 pb-6 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
               <div>
                 <p className="text-xs text-[#8d6e63]">{t('rmCode')}</p>
-                <p className="font-medium">{data.summary.rmCode?.code || '-'}</p>
+                <p className="font-medium">
+                  {data.summary.rmCode?.name || data.summary.rmCode?.code || '-'}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-[#8d6e63]">{t('vendor')}</p>

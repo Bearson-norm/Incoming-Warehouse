@@ -8,13 +8,30 @@ export function getPrintValidationError(data: PrintLabelData | null): string | n
   if (!lpn || lpn === '-' || lpn === 'LPN-N/A' || lpn === 'N/A') {
     return 'printNeedsLpn';
   }
-  const incoming = data.dateIncoming?.trim();
-  if (!incoming) {
-    return 'printNeedsIncomingDate';
+  const batch = data.batch?.trim();
+  if (!batch || batch === '-' || batch === 'BATCH-N/A' || batch === 'N/A') {
+    return 'printNeedsBatch';
   }
-  const parsed = new Date(incoming);
+  if (!data.vendorName?.trim()) {
+    return 'printNeedsVendor';
+  }
+  if (!data.skuName?.trim()) {
+    return 'printNeedsSku';
+  }
+  if (!data.referenceOdoo?.trim()) {
+    return 'printNeedsReferenceOdoo';
+  }
+  const arrivalAt = data.arrivalAt?.trim();
+  if (!arrivalAt || Number.isNaN(new Date(arrivalAt).getTime())) {
+    return 'printNeedsArrivalDate';
+  }
+  const expiredDate = data.expiredDate?.trim();
+  if (!expiredDate) {
+    return 'printNeedsExpiredDate';
+  }
+  const parsed = new Date(expiredDate);
   if (Number.isNaN(parsed.getTime())) {
-    return 'printNeedsIncomingDate';
+    return 'printNeedsExpiredDate';
   }
   return null;
 }

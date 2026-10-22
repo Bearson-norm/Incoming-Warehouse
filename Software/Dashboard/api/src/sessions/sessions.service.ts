@@ -3,13 +3,17 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { WeightSnapshotStore } from '../websocket/weight-snapshot.store';
 import { CloudSyncService } from '../cloud/cloud-sync.service';
+import { buildIncomingLpnFromInputs } from '../lpn/incoming-lpn';
 
 const LPN_REGEX = /^[A-Za-z0-9][A-Za-z0-9/_-]*$/;
+const INTERNAL_LPN_MAX_ATTEMPTS = 5;
 
 const sessionInclude = {
   vendor: true,
@@ -37,7 +41,7 @@ export class SessionsService {
     packageUid: string | undefined,
     required: boolean,
   ): string | null {
-    const lpn = packageUid?.trim() || '';
+    const lpn = packageUid?.trim().toUpperCase() || '';
     if (!lpn) {
       if (required) {
         throw new BadRequestException('LPN (packageUid) is required');
@@ -50,6 +54,74 @@ export class SessionsService {
       );
     }
     return lpn;
+  }
+
+  private async assertIncomingLpnUnique(packageUid: string | null) {
+    if (!packageUid) return;
+    const existing = await this.prisma.weighSession.findMany({
+      where: { flowType: 'incoming', packageUid: { not: null } },
+      select: { id: true, packageUid: true },
+    });
+    if (
+      existing.some(
+        (row) => row.packageUid?.trim().toUpperCase() === packageUid,
+      )
+    ) {
+      throw new ConflictException(`LPN ${packageUid} sudah pernah digunakan`);
+    }
+  }
+
+  private assertInternalLabelMetadata(meta: Record<string, unknown> | undefined) {
+    const reference = String(meta?.referenceOdoo ?? '').trim();
+    const batch = String(meta?.batch ?? '').trim();
+    const arrivalAt = String(meta?.arrivalAt ?? '').trim();
+    const expiredDate = String(meta?.expiredDate ?? '').trim();
+    if (!reference) {
+      throw new BadRequestException(
+        'Internal incoming requires reference (referenceOdoo)',
+      );
+    }
+    if (!batch) {
+      throw new BadRequestException('Internal incoming requires batch');
+    }
+    if (!arrivalAt || Number.isNaN(new Date(arrivalAt).getTime())) {
+      throw new BadRequestException(
+        'Internal incoming requires a valid arrival date',
+      );
+    }
+    if (!expiredDate || Number.isNaN(new Date(expiredDate).getTime())) {
+      throw new BadRequestException(
+        'Internal incoming requires a valid expired date',
+      );
+    }
+    return { reference, batch, arrivalAt, expiredDate };
+  }
+
+  private async generateInternalIncomingLpn(
+    reference: string,
+    batch: string,
+    rmCode: string,
+  ): Promise<{ lpn: string; uniqueSegment: string }> {
+    for (let attempt = 0; attempt < INTERNAL_LPN_MAX_ATTEMPTS; attempt++) {
+      const { lpn, uniqueSegment } = buildIncomingLpnFromInputs({
+        reference,
+        batch,
+        rmCode,
+      });
+      try {
+        await this.assertIncomingLpnUnique(lpn);
+        return { lpn, uniqueSegment };
+      } catch (error) {
+        if (
+          error instanceof ConflictException &&
+          attempt < INTERNAL_LPN_MAX_ATTEMPTS - 1
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new ConflictException('Could not allocate a unique LPN');
   }
 
   async create(userId: number, dto: CreateSessionDto) {
@@ -78,12 +150,12 @@ export class SessionsService {
     } else if (weighingMethod === 'odoo') {
       packageUid = this.assertLpn(dto.packageUid, true);
     } else {
-      packageUid = this.assertLpn(dto.packageUid, false);
       if (!vendorId || !packagingId || !rmCodeId) {
         throw new BadRequestException(
           'Internal incoming weighing requires vendor, packaging, and RM code',
         );
       }
+      const labelFields = this.assertInternalLabelMetadata(dto.labelMetadata);
       const packaging = await this.prisma.packaging.findUnique({
         where: { id: packagingId },
       });
@@ -109,6 +181,25 @@ export class SessionsService {
           'RM code does not belong to the selected vendor',
         );
       }
+      const generated = await this.generateInternalIncomingLpn(
+        labelFields.reference,
+        labelFields.batch,
+        rm.code,
+      );
+      packageUid = generated.lpn;
+      dto.labelMetadata = {
+        ...(dto.labelMetadata ?? {}),
+        referenceOdoo: labelFields.reference,
+        batch: labelFields.batch,
+        arrivalAt: labelFields.arrivalAt,
+        expiredDate: labelFields.expiredDate,
+        lpnUniqueSegment: generated.uniqueSegment,
+        labelProductNumber: generated.lpn,
+      };
+    }
+
+    if (flowType === 'incoming' && weighingMethod === 'odoo') {
+      await this.assertIncomingLpnUnique(packageUid);
     }
 
     await this.prisma.weighSession.updateMany({
@@ -121,24 +212,36 @@ export class SessionsService {
       },
     });
 
-    const created = await this.prisma.weighSession.create({
-      data: {
-        packageUid,
-        vendorId,
-        packagingId,
-        rmCodeId,
-        scaleId,
-        scaleName,
-        weighingMethod,
-        flowType,
-        userId,
-        autosaveEnabled: dto.autosaveEnabled ?? false,
-        ...(dto.labelMetadata != null
-          ? { labelMetadata: JSON.stringify(dto.labelMetadata) }
-          : {}),
-      },
-      include: sessionInclude,
-    });
+    let created;
+    try {
+      created = await this.prisma.weighSession.create({
+        data: {
+          packageUid,
+          vendorId,
+          packagingId,
+          rmCodeId,
+          scaleId,
+          scaleName,
+          weighingMethod,
+          flowType,
+          userId,
+          autosaveEnabled: dto.autosaveEnabled ?? false,
+          ...(dto.labelMetadata != null
+            ? { labelMetadata: JSON.stringify(dto.labelMetadata) }
+            : {}),
+        },
+        include: sessionInclude,
+      });
+    } catch (error) {
+      if (
+        packageUid &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(`LPN ${packageUid} sudah pernah digunakan`);
+      }
+      throw error;
+    }
     this.cloudSync.scheduleTraceEvent(
       created,
       created.user.username,

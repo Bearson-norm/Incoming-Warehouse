@@ -31,4 +31,8 @@ export class ConfirmWeighingDto {
   @IsOptional()
   @IsDateString()
   capturedAt?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  saveLocally?: boolean;
 }

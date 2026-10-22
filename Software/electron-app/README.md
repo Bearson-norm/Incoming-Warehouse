@@ -80,11 +80,21 @@ Script ini akan:
 Sebelum package **Windows**, runtime Node untuk API/Gateway di-bundle otomatis (`npm run bundle-node` di dalam `package:win`). PC pengguna akhir tidak perlu menginstal Node.js.
 
 ```bash
-# Windows (menggunakan PowerShell script untuk skip code signing)
+# Windows (PowerShell — skip code signing)
 cd electron-app
-npm run package:win
+npm run package:win              # portable + NSIS (all)
 
-# Atau dari root directory
+# Satu artefak saja (dari folder Software/):
+npm run package:electron:win:unpacked
+npm run package:electron:win:portable
+npm run package:electron:win:installer
+
+# Setara di electron-app/
+npm run package:win:unpacked
+npm run package:win:portable
+npm run package:win:installer
+
+# Atau dari root Software/
 npm run package:electron:win
 
 # Mac
@@ -98,27 +108,25 @@ npm run package:electron:linux
 
 ```powershell
 cd electron-app
-.\scripts\package-win-no-sign.ps1
+.\scripts\package-win-no-sign.ps1 -Target all      # default
+.\scripts\package-win-no-sign.ps1 -Target dir      # win-unpacked only
+.\scripts\package-win-no-sign.ps1 -Target portable
+.\scripts\package-win-no-sign.ps1 -Target nsis
 ```
 
 Output akan berada di folder `release/`.
 
 ## Data lokal & cloud VPS
 
-- **Database operasional**: SQLite di folder data aplikasi (portable: di samping exe; normal: `%USERPROFILE%\.incoming-warehouse-electron\`). Tidak perlu PostgreSQL di PC timbang.
+- **Database operasional**: SQLite di folder data aplikasi (lihat tabel metode distribusi di [docs/electron-config-locations.md](../docs/electron-config-locations.md)). Tidak perlu PostgreSQL di PC timbang.
 - **Cloud VPS**: Settings → **Cloud Server Configuration** — URL publik VPS + **Cloud Sync API Key** (sama dengan `CLOUD_SYNC_API_KEY` di `Software/infra/.env`). Panduan lengkap: [CLOUD_SETUP.md](../CLOUD_SETUP.md).
 - **Admin Cloud Server** (buat timbangan dari Electron): set `jwtSecret` di `config.json` sama dengan `JWT_SECRET` VPS (lihat CLOUD_SETUP).
 
 ### Lokasi file konfigurasi
 
-| Mode | Lokasi | Use case |
-|------|--------|----------|
-| **Portable** | `config.json` di folder exe + folder `data/` | USB / copy folder |
-| **User** | `%USERPROFILE%\.incoming-warehouse-electron\config.json` | Instal normal |
+Panduan lengkap (portable, win-unpacked, NSIS, gateway COM/baud): **[docs/electron-config-locations.md](../docs/electron-config-locations.md)**.
 
-**Prioritas:** jika `config.json` ada di folder exe, dipakai mode portable.
-
-Template: [config.example.json](config.example.json)
+Template `config.json`: [config.example.json](config.example.json)
 
 **Portable:** copy **seluruh folder** `win-unpacked`, jangan hanya exe — `resources/` wajib ada (API, web, gateway).
 
@@ -222,4 +230,4 @@ cd ../../electron-app && npm install
 
 - SQLite lokal untuk sesi/timbangan; VPS hanya untuk agregasi cloud (opsional)
 - API di `localhost:4123`; Gateway tidak langsung ke VPS
-- Config: portable folder atau `~/.incoming-warehouse-electron/config.json`
+- Config: lihat [docs/electron-config-locations.md](../docs/electron-config-locations.md)

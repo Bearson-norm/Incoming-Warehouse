@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -27,14 +27,23 @@ import {
 import { useCloudScales } from '../hooks/useCloudScales';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { SearchableSelect } from '../components/SearchableSelect';
+import OdooLocalFallbackDialog from '../components/OdooLocalFallbackDialog';
+import {
+  composeIncomingLpnPreview,
+  previewIncomingUniqueSegment,
+} from '../utils/incomingLpn';
 
 function toPrintData(args: {
   lpn: string;
-  dateIncoming: string;
+  referenceOdoo: string;
+  batch: string;
+  arrivalAt: string;
+  expiredDate: string;
   result: ConfirmResult;
   vendorName?: string;
   packagingName?: string;
   rmCode?: string;
+  skuName?: string;
 }): PrintLabelData {
   return {
     vendorName: args.vendorName || '',
@@ -43,12 +52,13 @@ function toPrintData(args: {
     weight: args.result.grossWeight ?? 0,
     unit: 'kg',
     capturedAt: new Date().toISOString(),
-    referenceOdoo: args.rmCode || '',
-    batch: '',
+    referenceOdoo: args.referenceOdoo,
+    batch: args.batch,
     labelProductNumber: args.lpn,
-    poAdj: '',
-    skuName: args.rmCode || args.packagingName || '',
-    dateIncoming: args.dateIncoming,
+    skuName: args.skuName || args.rmCode || args.packagingName || '',
+    skuCode: args.rmCode || undefined,
+    expiredDate: args.expiredDate,
+    arrivalAt: args.arrivalAt,
   };
 }
 
@@ -56,7 +66,10 @@ export default function RecordingAction() {
   const { t } = useI18n();
   const [method, setMethod] = useState<WeighingMethod>('odoo');
   const [packageUid, setPackageUid] = useState('');
-  const [dateIncoming, setDateIncoming] = useState('');
+  const [referenceOdoo, setReferenceOdoo] = useState('');
+  const [batch, setBatch] = useState('');
+  const [arrivalAt, setArrivalAt] = useState('');
+  const [expiredDate, setExpiredDate] = useState('');
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [rmCodes, setRmCodes] = useState<RmCode[]>([]);
   const [vendorId, setVendorId] = useState('');
@@ -69,7 +82,9 @@ export default function RecordingAction() {
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [lastResult, setLastResult] = useState<ConfirmResult | null>(null);
+  const [odooFailure, setOdooFailure] = useState<string | null>(null);
   const [printLabelData, setPrintLabelData] = useState<PrintLabelData | null>(null);
+  const [previewUniqueSegment, setPreviewUniqueSegment] = useState('');
   const {
     scales,
     scaleId,
@@ -137,12 +152,51 @@ export default function RecordingAction() {
       setScaleId(String(data.scaleId));
     }
     const meta = parseLabelMetadata(data.labelMetadata);
-    if (typeof meta.dateIncoming === 'string') {
-      setDateIncoming(meta.dateIncoming);
+    setReferenceOdoo(typeof meta.referenceOdoo === 'string' ? meta.referenceOdoo : '');
+    setBatch(typeof meta.batch === 'string' ? meta.batch : '');
+    setArrivalAt(typeof meta.arrivalAt === 'string' ? meta.arrivalAt : '');
+    const storedExpiredDate =
+      typeof meta.expiredDate === 'string'
+        ? meta.expiredDate
+        : typeof meta.dateIncoming === 'string'
+          ? meta.dateIncoming
+          : '';
+    setExpiredDate(storedExpiredDate);
+    const uniqueSeg =
+      typeof meta.lpnUniqueSegment === 'string' ? meta.lpnUniqueSegment : '';
+    if (uniqueSeg) {
+      setPreviewUniqueSegment(uniqueSeg);
     }
     setIsConfigConfirmed(true);
     setIsWeighing(!!data.weighingStarted);
   };
+
+  useEffect(() => {
+    if (
+      method === 'internal' &&
+      !isConfigConfirmed &&
+      !previewUniqueSegment
+    ) {
+      setPreviewUniqueSegment(previewIncomingUniqueSegment());
+    }
+  }, [method, isConfigConfirmed, previewUniqueSegment]);
+
+  const internalLpnPreview = useMemo(() => {
+    if (method !== 'internal' || !selectedRm?.code) return null;
+    if (!previewUniqueSegment) return null;
+    return composeIncomingLpnPreview({
+      uniqueSegment: previewUniqueSegment,
+      reference: referenceOdoo,
+      rmCode: selectedRm.code,
+      batch,
+    });
+  }, [
+    method,
+    previewUniqueSegment,
+    referenceOdoo,
+    batch,
+    selectedRm?.code,
+  ]);
 
   const handleConfirmConfig = async () => {
     if (!scaleId || !selectedScale) {
@@ -157,6 +211,35 @@ export default function RecordingAction() {
     } else if (!vendorId || !packagingId || !rmCodeId) {
       toast.error(t('pleaseSelectTareAndRm'));
       return;
+    } else {
+      const draftPrint = toPrintData({
+        lpn: internalLpnPreview || 'LPN-N/A',
+        referenceOdoo,
+        batch,
+        arrivalAt,
+        expiredDate,
+        result: {
+          success: true,
+          readingId: 0,
+          packageUid: '',
+          tareWeight: selectedPackaging?.tareWeight ?? 0,
+          grossWeight: 0,
+          netWeight: 0,
+          weightStatus: 'local',
+          weighingMethod: 'internal',
+          flowType: 'incoming',
+          syncedToOdoo: false,
+        },
+        vendorName: selectedVendor?.name,
+        packagingName: selectedPackaging?.name,
+        rmCode: selectedRm?.code,
+        skuName: selectedRm?.name || selectedRm?.code,
+      });
+      const printError = getPrintValidationError(draftPrint);
+      if (printError) {
+        toast.error(t(printError));
+        return;
+      }
     }
 
     try {
@@ -166,11 +249,32 @@ export default function RecordingAction() {
         autosaveEnabled: false,
         scaleId: Number(scaleId),
         scaleName: selectedScale.name,
-        packageUid: packageUid.trim() || undefined,
+        ...(method === 'odoo'
+          ? { packageUid: packageUid.trim().toUpperCase() }
+          : {}),
         vendorId: method === 'internal' ? Number(vendorId) : undefined,
         packagingId: method === 'internal' ? Number(packagingId) : undefined,
         rmCodeId: method === 'internal' ? Number(rmCodeId) : undefined,
-        labelMetadata: dateIncoming ? { dateIncoming } : undefined,
+        labelMetadata:
+          method === 'internal'
+            ? {
+                referenceOdoo: referenceOdoo.trim(),
+                batch: batch.trim(),
+                arrivalAt,
+                expiredDate,
+                vendorName: selectedVendor?.name || '',
+                skuName: selectedRm?.name || selectedRm?.code || '',
+              }
+            : referenceOdoo.trim() || batch.trim() || arrivalAt || expiredDate
+              ? {
+                  referenceOdoo: referenceOdoo.trim(),
+                  batch: batch.trim(),
+                  arrivalAt,
+                  expiredDate,
+                  vendorName: selectedVendor?.name || '',
+                  skuName: selectedRm?.name || selectedRm?.code || '',
+                }
+              : undefined,
       });
       applySession(response.data);
       setLastResult(null);
@@ -202,12 +306,33 @@ export default function RecordingAction() {
     setCurrentWeight(null);
     if (clearResult) {
       setPackageUid('');
-      setDateIncoming('');
+      setReferenceOdoo('');
+      setBatch('');
+      setArrivalAt('');
+      setExpiredDate('');
       setVendorId('');
       setPackagingId('');
       setRmCodeId('');
+      setPreviewUniqueSegment('');
       setLastResult(null);
     }
+  };
+
+  const completeWeighing = (result: ConfirmResult) => {
+    setLastResult(result);
+    const status = result.weightStatus?.toLowerCase();
+    if (status === 'pass') {
+      toast.success(t('weightPass') + ': ' + (result.message || ''));
+    } else if (status === 'local') {
+      toast.success(t('savedLocally'));
+    } else {
+      toast.warning(t('weightFail') + ': ' + (result.message || ''));
+    }
+    setOdooFailure(null);
+    setSession(null);
+    setIsWeighing(false);
+    setIsConfigConfirmed(false);
+    resetForm(false);
   };
 
   const handleConfirmWeighing = async () => {
@@ -225,25 +350,37 @@ export default function RecordingAction() {
       const response = await api.post<ConfirmResult>('/weighings/confirm', {
         sessionId: session.id,
       });
-      setLastResult(response.data);
-      const status = response.data.weightStatus?.toLowerCase();
-      if (status === 'pass') {
-        toast.success(t('weightPass') + ': ' + (response.data.message || ''));
-      } else if (status === 'local') {
-        toast.success(t('savedLocally'));
-      } else {
-        toast.warning(t('weightFail') + ': ' + (response.data.message || ''));
-      }
-      setSession(null);
-      setIsWeighing(false);
-      setIsConfigConfirmed(false);
-      resetForm(false);
+      completeWeighing(response.data);
     } catch (error: any) {
       const msg =
         error.response?.data?.message ||
         error.response?.data?.error ||
         'Gagal menyimpan penimbangan';
-      toast.error(msg);
+      if (method === 'odoo') {
+        setOdooFailure(msg);
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const handleSaveLocalFallback = async () => {
+    if (!session) return;
+    setConfirming(true);
+    try {
+      const response = await api.post<ConfirmResult>('/weighings/confirm', {
+        sessionId: session.id,
+        saveLocally: true,
+      });
+      completeWeighing(response.data);
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          'Gagal menyimpan penimbangan secara lokal',
+      );
     } finally {
       setConfirming(false);
     }
@@ -260,7 +397,12 @@ export default function RecordingAction() {
       try {
         await api.patch(`/readings/${lastResult.readingId}/label`, {
           packageUid: lpn,
-          dateIncoming: dateIncoming || undefined,
+          referenceOdoo: referenceOdoo.trim(),
+          batch: batch.trim(),
+          arrivalAt,
+          expiredDate: expiredDate || undefined,
+          vendorName: selectedVendor?.name || '',
+          skuName: selectedRm?.name || selectedRm?.code || '',
         });
       } catch (error: any) {
         toast.error(error.response?.data?.message || t('pleaseFillLpnForOdoo'));
@@ -281,20 +423,42 @@ export default function RecordingAction() {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!lastResult) return;
-    const lpn = lastResult.packageUid || packageUid.trim();
+    const lpn = (lastResult.packageUid || packageUid).trim().toUpperCase();
     const data = toPrintData({
       lpn,
-      dateIncoming,
+      referenceOdoo,
+      batch,
+      arrivalAt,
+      expiredDate,
       result: lastResult,
       vendorName: selectedVendor?.name || session?.vendor?.name,
       packagingName: selectedPackaging?.name || session?.packaging?.name,
       rmCode: selectedRm?.code || session?.rmCode?.code,
+      skuName:
+        selectedRm?.name ||
+        session?.rmCode?.name ||
+        selectedRm?.code ||
+        session?.rmCode?.code,
     });
     const errorKey = getPrintValidationError(data);
     if (errorKey) {
       toast.error(t(errorKey));
+      return;
+    }
+    try {
+      await api.patch(`/readings/${lastResult.readingId}/label`, {
+        packageUid: lpn,
+        referenceOdoo: referenceOdoo.trim(),
+        batch: batch.trim(),
+        arrivalAt,
+        expiredDate,
+        vendorName: selectedVendor?.name || '',
+        skuName: selectedRm?.name || selectedRm?.code || '',
+      });
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || t('printIncomplete'));
       return;
     }
     flushSync(() => setPrintLabelData(data));
@@ -329,11 +493,19 @@ export default function RecordingAction() {
       {lastResult && !isConfigConfirmed && (
         <WeighingResultCard
           result={lastResult}
-          onSendToOdoo={lastResult.weighingMethod === 'internal' ? handleSendToOdoo : undefined}
+          onSendToOdoo={!lastResult.syncedToOdoo ? handleSendToOdoo : undefined}
           sending={sending}
-          onPrint={handlePrint}
+          onPrint={method === 'internal' ? handlePrint : undefined}
         />
       )}
+
+      <OdooLocalFallbackDialog
+        open={!!odooFailure}
+        error={odooFailure || ''}
+        saving={confirming}
+        onCancel={() => setOdooFailure(null)}
+        onSaveLocal={handleSaveLocalFallback}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
@@ -384,7 +556,12 @@ export default function RecordingAction() {
                     key={value}
                     type="button"
                     disabled={isConfigConfirmed}
-                    onClick={() => setMethod(value)}
+                    onClick={() => {
+                      setMethod(value);
+                      if (value === 'internal' && !previewUniqueSegment) {
+                        setPreviewUniqueSegment(previewIncomingUniqueSegment());
+                      }
+                    }}
                     className={cn(
                       'h-10 rounded-lg text-sm font-semibold border transition-all',
                       method === value
@@ -433,7 +610,7 @@ export default function RecordingAction() {
                       disabled={isConfigConfirmed || !vendorId}
                       options={filteredRmCodes.map((rm) => ({
                         value: String(rm.id),
-                        label: `${rm.code}${rm.name ? ` — ${rm.name}` : ''}`,
+                        label: rm.name || rm.code,
                       }))}
                       placeholder={t('selectRmCode')}
                       className="h-10"
@@ -442,33 +619,105 @@ export default function RecordingAction() {
                 </>
               )}
 
+              {method === 'odoo' && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-[#5d4037]">{t('lpn')}</Label>
+                  <Input
+                    type="text"
+                    value={packageUid}
+                    onChange={(e) => setPackageUid(e.target.value.toUpperCase())}
+                    placeholder="RM-BOM-31/05/2026-000011"
+                    className="h-10 font-mono"
+                    autoComplete="off"
+                    disabled={isConfigConfirmed}
+                  />
+                  <p className="text-[10px] text-[#8d6e63]">{t('lpnHint')}</p>
+                </div>
+              )}
+
+              {method === 'internal' && (
+                <>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-[#5d4037]">{t('referenceOdoo')}</Label>
+                <Input
+                  type="text"
+                  value={referenceOdoo}
+                  onChange={(e) => setReferenceOdoo(e.target.value)}
+                  className="h-10 font-mono"
+                  disabled={isConfigConfirmed}
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-[#5d4037]">{t('batch')}</Label>
+                <Input
+                  type="text"
+                  value={batch}
+                  onChange={(e) => setBatch(e.target.value)}
+                  className="h-10 font-mono"
+                  disabled={isConfigConfirmed}
+                  autoComplete="off"
+                />
+                <p className="text-[10px] text-[#8d6e63]">{t('batchHint')}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-[#5d4037]">{t('arrivalDate')}</Label>
+                <Input
+                  type="date"
+                  value={arrivalAt}
+                  onChange={(e) => setArrivalAt(e.target.value)}
+                  className="h-10"
+                  disabled={isConfigConfirmed}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-[#5d4037]">{t('bestBeforeDate')}</Label>
+                <Input
+                  type="date"
+                  value={expiredDate}
+                  onChange={(e) => setExpiredDate(e.target.value)}
+                  className="h-10"
+                  disabled={isConfigConfirmed}
+                />
+                <p className="text-[10px] text-[#8d6e63]">{t('expiredDateHint')}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-[#5d4037]">{t('uniqueNumber')}</Label>
+                <Input
+                  type="text"
+                  value={
+                    isConfigConfirmed
+                      ? previewUniqueSegment || '—'
+                      : previewUniqueSegment || t('lpnNotSet')
+                  }
+                  readOnly
+                  className="h-10 font-mono bg-[#efebe9]"
+                  autoComplete="off"
+                />
+                <p className="text-[10px] text-[#8d6e63]">{t('uniqueNumberHint')}</p>
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-[#5d4037]">{t('lpn')}</Label>
                 <Input
                   type="text"
-                  value={packageUid}
-                  onChange={(e) => setPackageUid(e.target.value)}
-                  placeholder="RM-BOM-31/05/2026-000011"
-                  className="h-10 font-mono"
+                  value={
+                    isConfigConfirmed
+                      ? packageUid || session?.packageUid || '—'
+                      : internalLpnPreview || '—'
+                  }
+                  readOnly
+                  className="h-10 font-mono bg-[#efebe9] break-all"
                   autoComplete="off"
-                  disabled={isConfigConfirmed}
                 />
-                <p className="text-[10px] text-[#8d6e63]">
-                  {method === 'odoo' ? t('lpnHint') : t('lpnOptionalHint')}
-                </p>
+                <p className="text-[10px] text-[#8d6e63]">{t('internalLpnPreviewHint')}</p>
               </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-[#5d4037]">{t('dateIncoming')}</Label>
-                <Input
-                  type="date"
-                  value={dateIncoming}
-                  onChange={(e) => setDateIncoming(e.target.value)}
-                  className="h-10"
-                  disabled={isConfigConfirmed}
-                />
-                <p className="text-[10px] text-[#8d6e63]">{t('dateIncomingHint')}</p>
-              </div>
+                </>
+              )}
 
               <Button
                 onClick={handleConfirmConfig}
@@ -527,7 +776,7 @@ export default function RecordingAction() {
                   {method === 'internal' && selectedPackaging && (
                     <p className="text-sm text-[#5d4037]">
                       {t('tare')}: {selectedPackaging.tareWeight} kg · {t('rmCode')}:{' '}
-                      {selectedRm?.code || session?.rmCode?.code}
+                      {selectedRm?.name || session?.rmCode?.name || selectedRm?.code || session?.rmCode?.code}
                     </p>
                   )}
                   <p className="text-xs text-[#8d6e63] mt-2">

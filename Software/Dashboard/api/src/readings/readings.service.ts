@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -313,7 +314,24 @@ export class ReadingsService {
   ) {
     const reading = await this.findOne(id, requester);
 
-    const nextLpn = dto.packageUid?.trim();
+    const nextLpn = dto.packageUid?.trim().toUpperCase();
+    if (nextLpn && reading.session.flowType === 'incoming') {
+      const existing = await this.prisma.weighSession.findMany({
+        where: {
+          flowType: 'incoming',
+          packageUid: { not: null },
+          id: { not: reading.sessionId },
+        },
+        select: { packageUid: true },
+      });
+      if (
+        existing.some(
+          (row) => row.packageUid?.trim().toUpperCase() === nextLpn,
+        )
+      ) {
+        throw new ConflictException(`LPN ${nextLpn} sudah pernah digunakan`);
+      }
+    }
     let nextMetadata: Record<string, unknown> = {};
     if (reading.session.labelMetadata) {
       try {
@@ -325,29 +343,56 @@ export class ReadingsService {
         nextMetadata = {};
       }
     }
-    if (dto.dateIncoming !== undefined) {
-      nextMetadata.dateIncoming = dto.dateIncoming;
+    if (dto.expiredDate !== undefined) {
+      nextMetadata.expiredDate = dto.expiredDate;
+      delete nextMetadata.dateIncoming;
+    }
+    if (dto.batch !== undefined) {
+      nextMetadata.batch = dto.batch.trim();
+    }
+    if (dto.arrivalAt !== undefined) {
+      nextMetadata.arrivalAt = dto.arrivalAt;
+    }
+    if (dto.referenceOdoo !== undefined) {
+      nextMetadata.referenceOdoo = dto.referenceOdoo.trim();
+    }
+    if (dto.vendorName !== undefined) {
+      nextMetadata.vendorName = dto.vendorName.trim();
+    }
+    if (dto.skuName !== undefined) {
+      nextMetadata.skuName = dto.skuName.trim();
     }
     if (nextLpn) {
       nextMetadata.packageUid = nextLpn;
       nextMetadata.labelProductNumber = nextLpn;
     }
 
-    await this.prisma.$transaction([
-      this.prisma.weighReading.update({
-        where: { id },
-        data: {
-          ...(nextLpn ? { packageUid: nextLpn } : {}),
-        },
-      }),
-      this.prisma.weighSession.update({
-        where: { id: reading.sessionId },
-        data: {
-          ...(nextLpn ? { packageUid: nextLpn } : {}),
-          labelMetadata: JSON.stringify(nextMetadata),
-        },
-      }),
-    ]);
+    try {
+      await this.prisma.$transaction([
+        this.prisma.weighReading.update({
+          where: { id },
+          data: {
+            ...(nextLpn ? { packageUid: nextLpn } : {}),
+          },
+        }),
+        this.prisma.weighSession.update({
+          where: { id: reading.sessionId },
+          data: {
+            ...(nextLpn ? { packageUid: nextLpn } : {}),
+            labelMetadata: JSON.stringify(nextMetadata),
+          },
+        }),
+      ]);
+    } catch (error) {
+      if (
+        nextLpn &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(`LPN ${nextLpn} sudah pernah digunakan`);
+      }
+      throw error;
+    }
 
     const updated = await this.findOne(id, requester);
     this.cloudSync.scheduleTraceEvent(

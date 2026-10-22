@@ -80,9 +80,11 @@ Pairing lengkap (JWT admin, checklist): [CLOUD_SETUP.md](CLOUD_SETUP.md).
 
 ### File config
 
-`~/.incoming-warehouse-electron/config.json` atau `config.json` di folder portable. Contoh: [electron-app/config.example.json](electron-app/config.example.json).
+Lokasi lengkap per metode distribusi (**portable**, **win-unpacked**, **NSIS**), termasuk config timbangan (COM/baud) yang terpisah: **[docs/electron-config-locations.md](docs/electron-config-locations.md)**.
 
-Odoo dapat diatur lewat Settings atau bagian `odoo` di JSON.
+Ringkas: `config.json` + SQLite ada di folder data aplikasi (portable: sejajar exe portable; unpacked: folder `win-unpacked`; NSIS: `%APPDATA%\Incoming Warehouse`). COM/baud: `%USERPROFILE%\.incoming-warehouse-gateway\`.
+
+Contoh field: [electron-app/config.example.json](electron-app/config.example.json). Odoo/cloud dapat diatur lewat Settings atau JSON.
 
 ## Integrasi Odoo WMS (Recording Action)
 
@@ -138,18 +140,29 @@ npx prisma generate
 
 ### Windows
 
+Jalankan dari folder **`Software/`**:
+
 ```bash
+# Semua artefak (portable + installer NSIS) — sama seperti sebelumnya
 npm run package:electron:win
+
+# Hanya salah satu (lebih cepat jika tidak butuh semua)
+npm run package:electron:win:unpacked   # folder release/win-unpacked saja
+npm run package:electron:win:portable   # satu file portable .exe
+npm run package:electron:win:installer  # NSIS Setup .exe
 ```
+
+Setara di `electron-app/`: `package:win`, `package:win:unpacked`, `package:win:portable`, `package:win:installer` (script `scripts/package-win-no-sign.ps1` dengan `-Target all|dir|portable|nsis`).
 
 Output utama:
 
 | Artefak | Keterangan |
 |--------|------------|
-| `release/* Setup *.exe` | Installer NSIS |
-| `release/Incoming Warehouse *.exe` | **Portable** (satu file, tanpa instalasi; bisa disalin ke USB — tetap simpan folder `resources` yang sama jika Anda memakai unpacked layout) |
+| `release/win-unpacked/` | Aplikasi tanpa installer (copy folder utuh, termasuk `resources/`) |
+| `release/* Setup *.exe` | Installer NSIS (`package:electron:win:installer` atau `package:electron:win`) |
+| `release/Incoming Warehouse *.exe` | **Portable** (satu file; target `portable` atau `package:electron:win`) |
 
-Build Windows **portable** juga dikonfigurasi di `electron-app/package.json` (`win.target` mencakup `portable`).
+Build Windows **portable** dan **nsis** juga didefinisikan di `electron-app/package.json` (`win.target`); script packaging memilih satu target per command.
 
 #### Apakah PC lain perlu menginstal Node.js?
 
@@ -158,6 +171,8 @@ Build Windows **portable** juga dikonfigurasi di `electron-app/package.json` (`w
 **Masih Anda perlukan di PC lain:** akses jaringan ke VPS cloud (jika sync diaktifkan); SQLite lokal dibuat otomatis — Node.js tidak perlu diinstal.
 
 Gunakan struktur **`win-unpacked`** utuh untuk USB/copy folder; satu file **`…Portable.exe`** menyertakan konten yang sama secara praktis untuk pengguna akhir.
+
+**Lokasi config setelah deploy:** [docs/electron-config-locations.md](docs/electron-config-locations.md).
 
 **Cadangan:** jika Anda menjalankan `electron-builder` tanpa langkah bundle, aplikasi bisa jatuh ke perintah `node` di PATH — pastikan jalur package resmi atau jalankan manual `npm run bundle-node` di folder `electron-app` sebelum package.
 

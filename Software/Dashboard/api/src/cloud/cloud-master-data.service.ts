@@ -488,13 +488,18 @@ export class CloudMasterDataService implements OnModuleInit, OnModuleDestroy {
         ? { prodArea: dto.prodArea?.trim() || null }
         : {}),
     };
-    if (dto.vendorCloudId) {
-      const vendor = await tx.vendor.findFirst({
-        where: { cloudId: dto.vendorCloudId, deletedAt: null },
-      });
-      if (!vendor)
-        throw new BadRequestException('Vendor not found or inactive');
-      data.vendorId = vendor.id;
+    if (dto.vendorCloudId !== undefined) {
+      const trimmed = dto.vendorCloudId?.trim();
+      if (!trimmed) {
+        data.vendorId = null;
+      } else {
+        const vendor = await tx.vendor.findFirst({
+          where: { cloudId: trimmed, deletedAt: null },
+        });
+        if (!vendor)
+          throw new BadRequestException('Vendor not found or inactive');
+        data.vendorId = vendor.id;
+      }
     }
     return data;
   }

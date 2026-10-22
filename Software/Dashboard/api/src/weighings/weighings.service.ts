@@ -72,6 +72,9 @@ export class WeighingsService {
     }
 
     const method = session.weighingMethod === 'internal' ? 'internal' : 'odoo';
+    if (dto.saveLocally) {
+      return this.confirmInternal(session, snapshot, method === 'odoo');
+    }
     if (method === 'internal') {
       return this.confirmInternal(session, snapshot);
     }
@@ -92,14 +95,14 @@ export class WeighingsService {
       throw new NotFoundException('Reading not found');
     }
 
-    if (reading.session.weighingMethod !== 'internal') {
-      throw new BadRequestException(
-        'Only internal weighings can be sent to Odoo from this action',
-      );
-    }
-
     if (reading.odooLogId) {
       return this.toConfirmResult(reading.session, reading);
+    }
+
+    if (reading.weightStatus?.toLowerCase() !== 'local') {
+      throw new BadRequestException(
+        'Only locally saved weighings can be sent to Odoo from this action',
+      );
     }
 
     const packageUid = (
@@ -213,6 +216,7 @@ export class WeighingsService {
   private async confirmInternal(
     session: SessionWithPackaging,
     snapshot: WeightSnapshot,
+    fallbackFromOdoo = false,
   ) {
     const unit = snapshot.unit || 'kg';
     const grossWeightKg = this.odooWeighing.toGrossWeightKg(
@@ -227,12 +231,15 @@ export class WeighingsService {
     if (flowType === 'incoming') {
       const tare = session.packaging?.tareWeight;
       if (tare == null) {
-        throw new BadRequestException(
-          'Internal incoming weighing requires packaging tare weight',
-        );
+        if (!fallbackFromOdoo) {
+          throw new BadRequestException(
+            'Internal incoming weighing requires packaging tare weight',
+          );
+        }
+      } else {
+        tareWeight = tare;
+        netWeight = Math.round((grossWeightKg - tare) * 1000) / 1000;
       }
-      tareWeight = tare;
-      netWeight = Math.round((grossWeightKg - tare) * 1000) / 1000;
     }
 
     const readingData: Prisma.WeighReadingUncheckedCreateInput = {
@@ -250,7 +257,9 @@ export class WeighingsService {
       tareWeight,
       netWeight,
       weightStatus: 'local',
-      odooMessage: 'Saved locally (internal)',
+      odooMessage: fallbackFromOdoo
+        ? 'Saved locally after Odoo submission failed'
+        : 'Saved locally (internal)',
     };
 
     const reading = await this.persistReading(session.id, readingData);

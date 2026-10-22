@@ -22,8 +22,7 @@ export default function WeighingResultCard({
   const status = result.weightStatus?.toLowerCase();
   const passed = status === 'pass';
   const local = status === 'local' || result.weighingMethod === 'internal';
-  const showSend =
-    result.weighingMethod === 'internal' && !result.syncedToOdoo && onSendToOdoo;
+  const showSend = !result.syncedToOdoo && onSendToOdoo;
 
   return (
     <Card

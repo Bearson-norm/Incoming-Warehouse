@@ -1,5 +1,16 @@
 # PowerShell script to package Windows app without code signing
 # This avoids the symbolic link permission error
+#
+# Target:
+#   all      - portable + NSIS installer (default, same as package:win)
+#   dir      - win-unpacked folder only (fastest for local testing)
+#   portable - single-file portable .exe (+ win-unpacked)
+#   nsis     - NSIS Setup installer (+ win-unpacked)
+
+param(
+    [ValidateSet('all', 'dir', 'portable', 'nsis')]
+    [string]$Target = 'all'
+)
 
 # Change to electron-app directory (parent of scripts folder)
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -14,6 +25,7 @@ $releasePath = Join-Path $projectRoot $releaseFolderName
 Set-Location $electronAppDir
 
 Write-Host "Working directory: $(Get-Location)" -ForegroundColor Gray
+Write-Host "Package target: $Target" -ForegroundColor Cyan
 Write-Host ""
 
 # Set all possible environment variables to disable code signing
@@ -228,6 +240,20 @@ $env:CSC_NAME = ""
 
 $winCodeSignCache = "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
 
+function Invoke-ElectronWinBuild {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$WinTarget,
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+    Write-Host "`n$Label (win.target=$WinTarget)..." -ForegroundColor Cyan
+    $cmd = "npm run package -- --win --config `"$tempConfigFile`" --config.win.target=$WinTarget --config.forceCodeSigning=false --config.win.signAndEditExecutable=false"
+    Write-Host "Running: $cmd" -ForegroundColor Gray
+    Invoke-Expression $cmd
+    return $LASTEXITCODE
+}
+
 try {
     # Use the temp config file (without signing)
     Write-Host "Using temporary config without signing..." -ForegroundColor Yellow
@@ -244,42 +270,32 @@ try {
         New-Item -ItemType Directory -Path $winCodeSignCache -Force | Out-Null
         Write-Host "Created empty winCodeSign cache directory" -ForegroundColor Gray
     }
-    
-    # Try building with portable target first (doesn't require signing)
-    Write-Host "Attempting portable build (no installer, no signing required)..." -ForegroundColor Cyan
-    
-    # Use Invoke-Expression to run command directly (more reliable)
-    # Add --config.forceCodeSigning=false to explicitly disable code signing
-    $portableCmd = "npm run package -- --win --config `"$tempConfigFile`" --config.win.target=portable --config.forceCodeSigning=false --config.win.signAndEditExecutable=false"
-    Write-Host "Running: $portableCmd" -ForegroundColor Gray
-    
-    Invoke-Expression $portableCmd
-    $exitCode = $LASTEXITCODE
-    
-    # If portable build succeeded, also try NSIS installer
-    if ($exitCode -eq 0) {
-        Write-Host "`nPortable build succeeded! Creating NSIS installer..." -ForegroundColor Green
-        
-        $nsisCmd = "npm run package -- --win --config `"$tempConfigFile`" --config.forceCodeSigning=false --config.win.signAndEditExecutable=false"
-        Write-Host "Running: $nsisCmd" -ForegroundColor Gray
-        
-        Invoke-Expression $nsisCmd
-        $exitCode = $LASTEXITCODE
-        
-        # If NSIS failed but portable succeeded, that's okay
-        if ($exitCode -ne 0) {
-            Write-Host "`n[WARN] NSIS installer creation had issues, but portable build succeeded." -ForegroundColor Yellow
-            Write-Host "You can use the portable version from: $(Join-Path $releasePath 'win-unpacked')" -ForegroundColor Cyan
-            $exitCode = 0  # Consider it success since portable worked
+
+    $exitCode = 0
+    switch ($Target) {
+        'dir' {
+            $exitCode = Invoke-ElectronWinBuild -WinTarget 'dir' -Label 'Building win-unpacked only'
         }
-    } else {
-        Write-Host "`nPortable build failed, trying NSIS installer..." -ForegroundColor Yellow
-        
-        $nsisCmd = "npm run package -- --win --config `"$tempConfigFile`" --config.forceCodeSigning=false --config.win.signAndEditExecutable=false"
-        Write-Host "Running: $nsisCmd" -ForegroundColor Gray
-        
-        Invoke-Expression $nsisCmd
-        $exitCode = $LASTEXITCODE
+        'portable' {
+            $exitCode = Invoke-ElectronWinBuild -WinTarget 'portable' -Label 'Building portable executable'
+        }
+        'nsis' {
+            $exitCode = Invoke-ElectronWinBuild -WinTarget 'nsis' -Label 'Building NSIS installer'
+        }
+        'all' {
+            $portableExit = Invoke-ElectronWinBuild -WinTarget 'portable' -Label 'Building portable executable'
+            if ($portableExit -eq 0) {
+                $exitCode = Invoke-ElectronWinBuild -WinTarget 'nsis' -Label 'Building NSIS installer'
+                if ($exitCode -ne 0) {
+                    Write-Host "`n[WARN] NSIS installer creation had issues, but portable build succeeded." -ForegroundColor Yellow
+                    Write-Host "You can use the portable version from: $(Join-Path $releasePath 'win-unpacked')" -ForegroundColor Cyan
+                    $exitCode = 0
+                }
+            } else {
+                Write-Host "`nPortable build failed, trying NSIS installer only..." -ForegroundColor Yellow
+                $exitCode = Invoke-ElectronWinBuild -WinTarget 'nsis' -Label 'Building NSIS installer'
+            }
+        }
     }
     
 } catch {

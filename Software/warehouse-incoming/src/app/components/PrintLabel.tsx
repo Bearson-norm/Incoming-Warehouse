@@ -7,7 +7,6 @@ export interface PrintLabelData {
   config: RecordingConfig;
   record: WeighingRecord;
   skuName: string;
-  poAdj: string;
   dateIncoming: string;
   qty: number;
 }
@@ -85,14 +84,6 @@ const LABEL_CSS = `
     padding: 5px 8px;
     margin: 0 0 8px 0;
     word-break: break-all;
-  }
-
-  .label-po {
-    font-size: 9px;
-    font-weight: 700;
-    font-family: 'Arial Black', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    margin-bottom: 6px;
-    padding-left: 2px;
   }
 
   /* Tabel info utama */
@@ -236,7 +227,7 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data }) => {
     return <div id="print-area" style={{ position: 'absolute', left: '-9999px', top: '-9999px' }} />;
   }
 
-  const { config, record, skuName, poAdj, dateIncoming, qty } = data;
+  const { config, record, skuName, dateIncoming, qty } = data;
 
   const now = new Date();
   const printDate = `${now.getDate().toString().padStart(2, '0')}-${now.toLocaleString('en-US', { month: 'short' })}-${now.getFullYear()} ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
@@ -259,6 +250,8 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data }) => {
   const lpnValue = record.labelProductNumber || config.labelProductNumber || 'N/A';
   const skuValue = skuName || config.packaging.type || 'N/A';
   const batchValue = record.batch || config.batch || 'N/A';
+  const netWeightInGrams = (record.net ?? 0) * 1000;
+  const nettoQrValue = netWeightInGrams.toFixed(2);
 
   return (
     <div id="print-area" style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '100mm' }}>
@@ -281,9 +274,6 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data }) => {
         <div className="label-product-number">
           {record.labelProductNumber || config.labelProductNumber}
         </div>
-
-        {/* === PO / Adj === */}
-        <div className="label-po">PO / Adj&nbsp;&nbsp;&nbsp;&nbsp;: {poAdj || '-'}</div>
 
         {/* === TABLE INFO === */}
         <table className="label-table">
@@ -328,9 +318,9 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data }) => {
           </div>
           <div className="label-qr-item">
             <div className="label-qr-box">
-              <QRCode value={batchValue} size={70} level="M" />
+              <QRCode value={nettoQrValue} size={70} level="M" />
             </div>
-            <div className="label-qr-tag">BATCH</div>
+            <div className="label-qr-tag">NETTO</div>
           </div>
         </div>
       </div>

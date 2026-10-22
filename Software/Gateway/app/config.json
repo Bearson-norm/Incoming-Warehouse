@@ -3,9 +3,9 @@
     "port": "COM12",
     "baudRate": 9600,
     "parity": "even",
-    "dataBits": 7,
+    "dataBits": 8,
     "stopBits": 1,
-    "autoDetect": true
+    "autoDetect": false
   },
   "server": {
     "url": "http://localhost:4123",
