@@ -26,6 +26,12 @@ const REASON =
   'Penggantian master RM dari Macro Inbound RMPM Batch V.5';
 const ACTOR_USERNAME = process.env.RM_REPLACE_ACTOR?.trim() || 'import-script';
 
+/** Bulk replace runs thousands of queries; Prisma default interactive tx timeout is 5s (P2028). */
+const BULK_TX_OPTIONS = {
+  maxWait: 60_000,
+  timeout: 600_000,
+};
+
 function forceReplace(): boolean {
   const v = process.env.RM_SKU_FORCE?.trim();
   return v === '1' || v === 'true';
@@ -165,7 +171,7 @@ async function main() {
         updated,
         activeAfter,
       };
-    });
+    }, BULK_TX_OPTIONS);
 
     await setStoredRmSkuHash(prisma, fileHash);
 
