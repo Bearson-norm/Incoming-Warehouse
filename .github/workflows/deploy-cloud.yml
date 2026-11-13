@@ -23,6 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check docker compose file
+        env:
+          # Placeholders so `:?` interpolation can parse. Real secrets stay in the VPS .env.
+          POSTGRES_PASSWORD: ci-validate-only
+          JWT_SECRET: ci-validate-only
+          GATEWAY_API_KEY: ci-validate-only
+          CLOUD_SYNC_API_KEY: ci-validate-only
         run: docker compose -f docker-compose.yml config --quiet
 
   deploy:
