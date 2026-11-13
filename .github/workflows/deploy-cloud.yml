@@ -38,7 +38,7 @@ jobs:
     environment: cloud
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     env:
-      DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH || '/opt/incoming-warehouse' }}
+      DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH || '/opt/Incoming-Warehouse' }}
     steps:
       - uses: actions/checkout@v4
 
