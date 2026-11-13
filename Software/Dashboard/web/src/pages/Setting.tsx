@@ -7,11 +7,31 @@ import { Label } from '../components/ui/label';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Settings, Languages, RotateCcw, Save, Info, Globe, Database, TestTube, Play, Square, Home, Activity, FileText, LogIn, Link2, ArrowLeftRight, Layers, Cloud, Usb } from 'lucide-react';
+import { Settings, Languages, RotateCcw, Save, Info, Globe, Database, TestTube, Play, Square, Home, Activity, FileText, LogIn, Link2, ArrowLeftRight, Layers, Cloud, Usb, Printer } from 'lucide-react';
 import { CloudStatus } from '../types/weighing';
 import { toast } from 'sonner';
 import api from '../services/api';
+import PrintLabel, { LabelPreview, PrintLabelData } from '../components/PrintLabel';
+import { loadLabelPrinterSettings, saveLabelPrinterSettings } from '../utils/printerSettings';
+import { formatPrintFailure, printRenderedLabel } from '../utils/printLabelJob';
 import './Setting.css';
+
+const SAMPLE_PRINT_LABEL: PrintLabelData = {
+  vendorName: 'Contoh Vendor',
+  packagingName: 'Jerigen',
+  tareWeight: 500,
+  weight: 25500,
+  unit: 'g',
+  capturedAt: new Date().toISOString(),
+  referenceOdoo: 'WRMPM/IN/13010',
+  poNumber: 'PO-DEMO-001',
+  batch: '11469',
+  labelProductNumber: 'WRMPM/IN/13010-PMSTK00297-11469',
+  skuName: 'Nama RM Contoh',
+  skuCode: 'PMSTK00297',
+  expiredDate: '2027-03-01',
+  arrivalAt: '2026-03-01',
+};
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && (window as any).electron?.isElectron === true;
@@ -106,12 +126,37 @@ export default function Setting() {
     settingsFile: '' as string | undefined,
   });
   const [cloudConfigLoading, setCloudConfigLoading] = useState(false);
+  const [printerSettings, setPrinterSettings] = useState(loadLabelPrinterSettings);
+  const [systemPrinters, setSystemPrinters] = useState<
+    Array<{ name: string; displayName: string; blocked: boolean; reason: string | null }>
+  >([]);
+  const [printersLoading, setPrintersLoading] = useState(false);
+  const [printTesting, setPrintTesting] = useState(false);
+  const [printTestMessage, setPrintTestMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const loadSystemPrinters = async () => {
+    const list = (window as any).electron?.printer?.list;
+    if (!list) return;
+    setPrintersLoading(true);
+    try {
+      const result = await list();
+      setSystemPrinters(result?.printers || []);
+      if (!result?.success && result?.error) {
+        toast.error(result.error);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || t('printFail_error'));
+    } finally {
+      setPrintersLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (isElectron && (window as any).electron) {
       loadDatabaseConfig();
       loadProcessStatus();
       loadGatewayDeviceConfig();
+      void loadSystemPrinters();
       const interval = setInterval(loadProcessStatus, 2000);
       return () => clearInterval(interval);
     }
@@ -631,6 +676,124 @@ export default function Setting() {
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ===== PRINT LABEL PREVIEW ===== */}
+        <Card className="border-2 border-[#d7ccc8] shadow-md overflow-visible brown-hover-effect bg-[#fff8f0]">
+          <div className="h-2 brown-gradient-animated relative overflow-hidden">
+            <div className="absolute inset-0 brown-shimmer"></div>
+          </div>
+          <CardHeader className="pb-3 px-6 pt-6">
+            <CardTitle className="flex items-center gap-3 text-base leading-tight">
+              <div className="w-9 h-9 rounded-lg bg-[#f5ebe0] flex items-center justify-center flex-shrink-0 brown-pulse-animated">
+                <Printer className="w-4 h-4 text-[#6d4c41]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[#3e2723] block leading-tight break-words">
+                  {t('printLabelPreview')}
+                </span>
+                <p className="text-xs font-normal text-[#8d6e63] mt-1 leading-relaxed break-words">
+                  {t('printLabelPreviewHint')}
+                </p>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 pb-6 px-6 space-y-4">
+            <PrintLabel data={SAMPLE_PRINT_LABEL} />
+            {isElectron ? (
+              <div className="space-y-3 max-w-md">
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-[#5d4037]">{t('printPrinter')}</Label>
+                  <Select
+                    value={printerSettings.deviceName || undefined}
+                    onValueChange={(value) => {
+                      const next = { ...printerSettings, deviceName: value };
+                      setPrinterSettings(next);
+                      saveLabelPrinterSettings(next);
+                      setPrintTestMessage(null);
+                    }}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder={t('printPrinter')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {printerSettings.deviceName &&
+                        !systemPrinters.some((printer) => printer.name === printerSettings.deviceName) && (
+                          <SelectItem value={printerSettings.deviceName}>
+                            {printerSettings.deviceName}
+                          </SelectItem>
+                        )}
+                      {systemPrinters.map((printer) => (
+                        <SelectItem key={printer.name} value={printer.name}>
+                          {printer.displayName}
+                          {printer.blocked ? ` (${t(`printFail_${printer.reason || 'error'}`)})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {systemPrinters.length === 0 && !printersLoading && (
+                    <p className="text-xs text-[#8d6e63]">{t('printNoPrinters')}</p>
+                  )}
+                </div>
+                <label className="flex items-start justify-between gap-3">
+                  <span>
+                    <span className="block text-sm font-medium text-[#3e2723]">{t('printAuto')}</span>
+                    <span className="block text-xs text-[#8d6e63] mt-1">{t('printAutoHint')}</span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4"
+                    checked={printerSettings.autoPrint}
+                    onChange={(event) => {
+                      const next = { ...printerSettings, autoPrint: event.target.checked };
+                      setPrinterSettings(next);
+                      saveLabelPrinterSettings(next);
+                    }}
+                  />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10"
+                    disabled={printersLoading}
+                    onClick={() => void loadSystemPrinters()}
+                  >
+                    {t('printRefreshPrinters')}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 brown-gradient-animated text-white"
+                    disabled={printTesting || !printerSettings.deviceName}
+                    onClick={() => {
+                      setPrintTesting(true);
+                      setPrintTestMessage(null);
+                      void printRenderedLabel('test')
+                        .then((outcome) => {
+                          setPrintTestMessage({
+                            ok: outcome.ok,
+                            text: outcome.ok ? t('printTestOk') : formatPrintFailure(t, outcome),
+                          });
+                        })
+                        .finally(() => setPrintTesting(false));
+                    }}
+                  >
+                    {printTesting ? t('printTesting') : t('printTest')}
+                  </Button>
+                </div>
+                {printTestMessage && (
+                  <p className={`text-sm ${printTestMessage.ok ? 'text-green-700' : 'text-red-700'}`}>
+                    {printTestMessage.text}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-[#8d6e63]">{t('printStationOnly')}</p>
+            )}
+            <div className="overflow-x-auto rounded-lg border border-[#d7ccc8] bg-[#fafafa] p-4 flex justify-center">
+              <LabelPreview data={SAMPLE_PRINT_LABEL} />
             </div>
           </CardContent>
         </Card>

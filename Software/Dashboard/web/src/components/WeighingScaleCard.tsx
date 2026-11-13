@@ -5,10 +5,11 @@ import { cn } from './ui/utils';
 import { WeightLivePayload } from '../types/socket';
 import { useI18n } from '../contexts/I18nContext';
 
-function formatKg(weight: WeightLivePayload | null): string {
-  if (!weight) return '0.000';
-  if (weight.unit === 'g') return (weight.weight / 1000).toFixed(3);
-  return weight.weight.toFixed(3);
+function formatGrams(weight: WeightLivePayload | null): string {
+  if (!weight) return '0.0';
+  const grams =
+    (weight.unit || 'g').toLowerCase() === 'kg' ? weight.weight * 1000 : weight.weight;
+  return grams.toFixed(1);
 }
 
 interface WeighingScaleCardProps {
@@ -65,11 +66,11 @@ export default function WeighingScaleCard({
         <div className="space-y-8">
           <div className="text-center">
             <p className="text-xs text-gray-500 mb-3 font-semibold uppercase tracking-wider">
-              {t('gross')} (kg)
+              {t('gross')} (g)
             </p>
             <div className="text-5xl lg:text-6xl font-mono bg-gray-50 py-6 rounded-xl border border-gray-100 leading-none">
-              <span className="text-gray-800">{formatKg(currentWeight)}</span>
-              <span className="text-2xl text-gray-400 ml-2">kg</span>
+              <span className="text-gray-800">{formatGrams(currentWeight)}</span>
+              <span className="text-2xl text-gray-400 ml-2">g</span>
             </div>
           </div>
 

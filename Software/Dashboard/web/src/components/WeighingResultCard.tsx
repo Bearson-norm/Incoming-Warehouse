@@ -21,6 +21,7 @@ export default function WeighingResultCard({
   const { t } = useI18n();
   const status = result.weightStatus?.toLowerCase();
   const passed = status === 'pass';
+  const pending = status === 'pending';
   const local = status === 'local' || result.weighingMethod === 'internal';
   const showSend = !result.syncedToOdoo && onSendToOdoo;
 
@@ -30,22 +31,30 @@ export default function WeighingResultCard({
         'mb-6 border-2 shadow-md',
         passed
           ? 'border-green-300 bg-green-50'
-          : local
-            ? 'border-[#d7ccc8] bg-[#fff8f0]'
-            : 'border-red-300 bg-red-50',
+          : pending
+            ? 'border-amber-300 bg-amber-50'
+            : local
+              ? 'border-[#d7ccc8] bg-[#fff8f0]'
+              : 'border-red-300 bg-red-50',
       )}
     >
       <CardContent className="pt-6 pb-6 space-y-3">
         <p className="text-sm font-semibold uppercase tracking-wider">
-          {passed ? t('weightPass') : local ? t('savedLocally') : t('weightFail')}
+          {passed
+            ? t('weightPass')
+            : pending
+              ? t('sentRefreshIot')
+              : local
+                ? t('savedLocally')
+                : t('weightFail')}
           {result.packageUid ? ` — ${result.packageUid}` : ''}
         </p>
         {result.message ? (
           <p className="text-sm text-gray-700">{result.message}</p>
         ) : null}
         <p className="text-xs text-gray-600 font-mono">
-          {t('gross')}: {result.grossWeight ?? '-'} kg · {t('tare')}:{' '}
-          {result.tareWeight ?? '-'} kg · {t('net')}: {result.netWeight ?? '-'} kg
+          {t('gross')}: {result.grossWeight ?? '-'} g · {t('tare')}:{' '}
+          {result.tareWeight ?? '-'} g · {t('net')}: {result.netWeight ?? '-'} g
         </p>
         <p className="text-xs text-[#8d6e63]">
           {result.syncedToOdoo ? t('sentToOdoo') : t('localOnly')}

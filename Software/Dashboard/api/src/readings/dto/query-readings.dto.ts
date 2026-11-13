@@ -1,5 +1,5 @@
-import { Type } from 'class-transformer';
-import { IsOptional, IsNumber, IsDateString, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsOptional, IsNumber, IsDateString, IsString, Max, Min } from 'class-validator';
 
 export class QueryReadingsDto {
   @IsOptional()
@@ -37,6 +37,19 @@ export class QueryReadingsDto {
   @IsOptional()
   @IsString()
   packageUid?: string;
+
+  @IsOptional()
+  @IsString()
+  poNumber?: string;
+
+  @IsOptional()
+  @IsIn(['po'])
+  groupBy?: 'po';
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  stable?: boolean;
 
   @IsOptional()
   @IsString()

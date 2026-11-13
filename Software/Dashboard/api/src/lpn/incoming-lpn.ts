@@ -1,35 +1,18 @@
-import { randomBytes } from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 
 export const INCOMING_LPN_MAX_LENGTH = 64;
 const SEGMENT_REGEX = /^[A-Za-z0-9][A-Za-z0-9/_-]*$/;
-const LPN_TIMEZONE = 'Asia/Jakarta';
 
 export type IncomingLpnParts = {
-  uniqueSegment: string;
   reference: string;
   rmCode: string;
   batch: string;
 };
 
-function yearInTimezone(tz: string, at: Date): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-  }).formatToParts(at);
-  const year = parts.find((p) => p.type === 'year')?.value;
-  if (!year) {
-    return String(at.getUTCFullYear());
-  }
-  return year;
-}
-
-/** 4 hex chars + 4-digit calendar year (e.g. A3F72026). */
-export function generateIncomingUniqueSegment(at = new Date()): string {
-  const short = randomBytes(2).toString('hex').toUpperCase();
-  const year = yearInTimezone(LPN_TIMEZONE, at);
-  return `${short}${year}`;
-}
+export type ComposeIncomingLpnOptions = {
+  /** Reserve trailing characters (e.g. `-30`) so batch suffixes still fit in 64. */
+  reservedSuffixLength?: number;
+};
 
 export function normalizeIncomingReference(raw: string): string {
   return raw.trim().toUpperCase();
@@ -59,16 +42,43 @@ function truncateSegment(value: string, maxLen: number): string {
   return value.slice(0, maxLen);
 }
 
+/** Characters needed for `-${n}` (hyphen + digits). */
+export function incomingLpnSequenceSuffixLength(n: number): number {
+  if (!Number.isInteger(n) || n < 1) {
+    throw new BadRequestException('LPN sequence must be a positive integer');
+  }
+  return 1 + String(n).length;
+}
+
+/** Append 1-based arrival sequence: `base-n`. */
+export function appendIncomingLpnSequence(baseLpn: string, n: number): string {
+  const base = baseLpn.trim().toUpperCase();
+  if (!base) {
+    throw new BadRequestException('Base LPN is required');
+  }
+  if (!Number.isInteger(n) || n < 1) {
+    throw new BadRequestException('LPN sequence must be a positive integer');
+  }
+  const lpn = `${base}-${n}`;
+  if (lpn.length > INCOMING_LPN_MAX_LENGTH) {
+    throw new BadRequestException('Composed LPN exceeds maximum length');
+  }
+  return lpn;
+}
+
 /**
- * Builds incoming internal LPN; truncates batch then reference if over max length.
+ * Builds incoming internal LPN `{Reference}-{RmCode}-{Batch}`.
+ * Truncates batch then reference if over max length (minus reservedSuffixLength).
  */
-export function composeIncomingLpn(parts: IncomingLpnParts): string {
-  const uniqueSegment = parts.uniqueSegment.trim().toUpperCase();
+export function composeIncomingLpn(
+  parts: IncomingLpnParts,
+  options: ComposeIncomingLpnOptions = {},
+): string {
   let reference = normalizeIncomingReference(parts.reference);
   let batch = normalizeIncomingBatch(parts.batch);
   const rmCode = normalizeIncomingRmCode(parts.rmCode);
+  const reserved = Math.max(0, options.reservedSuffixLength ?? 0);
 
-  assertSegment('unique', uniqueSegment);
   assertSegment('rmCode', rmCode);
   if (!reference) {
     throw new BadRequestException('Reference is required for LPN');
@@ -79,17 +89,20 @@ export function composeIncomingLpn(parts: IncomingLpnParts): string {
   assertSegment('reference', reference);
   assertSegment('batch', batch);
 
-  const build = () =>
-    `${uniqueSegment}-${reference}-${rmCode}-${batch}`.toUpperCase();
+  const maxLen = INCOMING_LPN_MAX_LENGTH - reserved;
+  if (maxLen < 5) {
+    throw new BadRequestException('LPN segments are too long to fit');
+  }
+
+  const build = () => `${reference}-${rmCode}-${batch}`.toUpperCase();
 
   let lpn = build();
-  if (lpn.length <= INCOMING_LPN_MAX_LENGTH) {
+  if (lpn.length <= maxLen) {
     return lpn;
   }
 
-  const fixedLen =
-    uniqueSegment.length + rmCode.length + 3; /* three hyphens */
-  let budget = INCOMING_LPN_MAX_LENGTH - fixedLen;
+  const fixedLen = rmCode.length + 2; /* two hyphens */
+  let budget = maxLen - fixedLen;
   if (budget < 2) {
     throw new BadRequestException('LPN segments are too long to fit');
   }
@@ -100,7 +113,7 @@ export function composeIncomingLpn(parts: IncomingLpnParts): string {
   batch = truncateSegment(batch, batchLen);
   lpn = build();
 
-  if (lpn.length > INCOMING_LPN_MAX_LENGTH) {
+  if (lpn.length > maxLen) {
     throw new BadRequestException('Composed LPN exceeds maximum length');
   }
   return lpn;
@@ -110,14 +123,15 @@ export function buildIncomingLpnFromInputs(args: {
   reference: string;
   rmCode: string;
   batch: string;
-  at?: Date;
-}): { lpn: string; uniqueSegment: string } {
-  const uniqueSegment = generateIncomingUniqueSegment(args.at);
-  const lpn = composeIncomingLpn({
-    uniqueSegment,
-    reference: args.reference,
-    rmCode: args.rmCode,
-    batch: args.batch,
-  });
-  return { lpn, uniqueSegment };
+  reservedSuffixLength?: number;
+}): { lpn: string } {
+  const lpn = composeIncomingLpn(
+    {
+      reference: args.reference,
+      rmCode: args.rmCode,
+      batch: args.batch,
+    },
+    { reservedSuffixLength: args.reservedSuffixLength },
+  );
+  return { lpn };
 }

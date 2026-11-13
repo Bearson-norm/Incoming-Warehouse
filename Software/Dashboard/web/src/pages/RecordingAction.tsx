@@ -11,13 +11,22 @@ import api from '../services/api';
 import { toast } from 'sonner';
 import { CheckCircle, Package, Activity } from 'lucide-react';
 import { cn } from '../components/ui/utils';
-import PrintLabel, { PrintLabelData, printLabelInNewWindow } from '../components/PrintLabel';
+import PrintLabel, { PrintLabelData } from '../components/PrintLabel';
+import { getInternalIncomingFieldsError } from '../utils/internalIncomingFieldValidation';
 import { getPrintValidationError } from '../utils/printLabelValidation';
+import { loadLabelPrinterSettings } from '../utils/printerSettings';
+import {
+  formatPrintFailure,
+  beginReadingPrint,
+  finishReadingPrint,
+  markReadingPrinted,
+  printRenderedLabel,
+} from '../utils/printLabelJob';
 import WeighingScaleCard from '../components/WeighingScaleCard';
 import WeighingResultCard from '../components/WeighingResultCard';
 import {
+  BatchQueueItem,
   ConfirmResult,
-  Packaging,
   parseLabelMetadata,
   RmCode,
   Vendor,
@@ -28,14 +37,71 @@ import { useCloudScales } from '../hooks/useCloudScales';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { SearchableSelect } from '../components/SearchableSelect';
 import OdooLocalFallbackDialog from '../components/OdooLocalFallbackDialog';
-import {
-  composeIncomingLpnPreview,
-  previewIncomingUniqueSegment,
-} from '../utils/incomingLpn';
+import { composeIncomingLpnPreview } from '../utils/incomingLpn';
+import { normalizeLpnField, parsePackageUidInput } from '../utils/parseLpnInput';
+
+type OdooProcess = 'inbound' | 'qc_sample' | 'production';
+
+function metaProcess(value: unknown): OdooProcess {
+  return value === 'qc_sample' || value === 'production' ? value : 'inbound';
+}
+
+function BatchQueueList({
+  items,
+  title,
+  activeLabel,
+  pendingLabel,
+  doneLabel,
+}: {
+  items: BatchQueueItem[];
+  title: string;
+  activeLabel: string;
+  pendingLabel: string;
+  doneLabel: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-[#5d4037]">{title}</Label>
+      <ol className="space-y-1.5">
+        {items.map((item) => {
+          const status = item.queueStatus;
+          const label =
+            status === 'active' ? activeLabel : status === 'done' ? doneLabel : pendingLabel;
+          return (
+            <li
+              key={item.id}
+              className={cn(
+                'rounded-lg border px-3 py-2',
+                status === 'active'
+                  ? 'border-[#6d4c41] bg-[#f5ebe0]'
+                  : status === 'done'
+                    ? 'border-green-200 bg-green-50'
+                    : 'border-[#d7ccc8] bg-white',
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-[#3e2723]">
+                  {item.batchSequence ?? '—'}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-[#5d4037]">
+                  {label}
+                </span>
+              </div>
+              <p className="font-mono text-xs break-all text-[#3e2723]">
+                {item.packageUid || '—'}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
 
 function toPrintData(args: {
   lpn: string;
   referenceOdoo: string;
+  poNumber: string;
   batch: string;
   arrivalAt: string;
   expiredDate: string;
@@ -50,9 +116,10 @@ function toPrintData(args: {
     packagingName: args.packagingName || '',
     tareWeight: args.result.tareWeight ?? 0,
     weight: args.result.grossWeight ?? 0,
-    unit: 'kg',
+    unit: 'g',
     capturedAt: new Date().toISOString(),
     referenceOdoo: args.referenceOdoo,
+    poNumber: args.poNumber,
     batch: args.batch,
     labelProductNumber: args.lpn,
     skuName: args.skuName || args.rmCode || args.packagingName || '',
@@ -66,8 +133,14 @@ export default function RecordingAction() {
   const { t } = useI18n();
   const [method, setMethod] = useState<WeighingMethod>('odoo');
   const [packageUid, setPackageUid] = useState('');
+  const [odooProcess, setOdooProcess] = useState<OdooProcess>('inbound');
+  const [qcRecord, setQcRecord] = useState('');
+  const [sampleTare, setSampleTare] = useState('');
   const [referenceOdoo, setReferenceOdoo] = useState('');
+  const [poNumber, setPoNumber] = useState('');
   const [batch, setBatch] = useState('');
+  const [batchWeighing, setBatchWeighing] = useState(false);
+  const [batchQuantity, setBatchQuantity] = useState('2');
   const [arrivalAt, setArrivalAt] = useState('');
   const [expiredDate, setExpiredDate] = useState('');
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -84,7 +157,6 @@ export default function RecordingAction() {
   const [lastResult, setLastResult] = useState<ConfirmResult | null>(null);
   const [odooFailure, setOdooFailure] = useState<string | null>(null);
   const [printLabelData, setPrintLabelData] = useState<PrintLabelData | null>(null);
-  const [previewUniqueSegment, setPreviewUniqueSegment] = useState('');
   const {
     scales,
     scaleId,
@@ -96,8 +168,26 @@ export default function RecordingAction() {
   } = useCloudScales();
 
   const selectedVendor = vendors.find((v) => String(v.id) === vendorId);
-  const selectedPackaging = selectedVendor?.packagings?.find((p) => String(p.id) === packagingId);
+  const allPackagings = useMemo(
+    () =>
+      vendors.flatMap((v) =>
+        (v.packagings || []).map((p) => ({
+          ...p,
+          vendorName: p.vendorName ?? v.name,
+        })),
+      ),
+    [vendors],
+  );
+  const selectedPackaging =
+    allPackagings.find((p) => String(p.id) === packagingId) ??
+    session?.packaging ??
+    undefined;
   const selectedRm = rmCodes.find((r) => String(r.id) === rmCodeId);
+  const batchQueue = session?.batchQueue ?? [];
+  const showBatchQueue = method === 'internal' && batchQueue.length > 0;
+  const batchCount = Number(batchQuantity);
+  const batchCountValid =
+    Number.isInteger(batchCount) && batchCount >= 2 && batchCount <= 30;
 
   useEffect(() => {
     loadMasters();
@@ -152,7 +242,23 @@ export default function RecordingAction() {
       setScaleId(String(data.scaleId));
     }
     const meta = parseLabelMetadata(data.labelMetadata);
+    setOdooProcess(metaProcess(meta.odooWeighingType));
+    setQcRecord(typeof meta.qcRecord === 'string' ? meta.qcRecord : '');
+    setSampleTare(
+      typeof meta.sampleTareG === 'number'
+        ? String(meta.sampleTareG)
+        : typeof meta.sampleTareKg === 'number'
+          ? String(meta.sampleTareKg * 1000)
+          : '',
+    );
     setReferenceOdoo(typeof meta.referenceOdoo === 'string' ? meta.referenceOdoo : '');
+    const storedPo =
+      typeof meta.poNumber === 'string'
+        ? meta.poNumber
+        : typeof meta.poAdj === 'string'
+          ? meta.poAdj
+          : '';
+    setPoNumber(storedPo);
     setBatch(typeof meta.batch === 'string' ? meta.batch : '');
     setArrivalAt(typeof meta.arrivalAt === 'string' ? meta.arrivalAt : '');
     const storedExpiredDate =
@@ -162,41 +268,18 @@ export default function RecordingAction() {
           ? meta.dateIncoming
           : '';
     setExpiredDate(storedExpiredDate);
-    const uniqueSeg =
-      typeof meta.lpnUniqueSegment === 'string' ? meta.lpnUniqueSegment : '';
-    if (uniqueSeg) {
-      setPreviewUniqueSegment(uniqueSeg);
-    }
     setIsConfigConfirmed(true);
     setIsWeighing(!!data.weighingStarted);
   };
 
-  useEffect(() => {
-    if (
-      method === 'internal' &&
-      !isConfigConfirmed &&
-      !previewUniqueSegment
-    ) {
-      setPreviewUniqueSegment(previewIncomingUniqueSegment());
-    }
-  }, [method, isConfigConfirmed, previewUniqueSegment]);
-
   const internalLpnPreview = useMemo(() => {
     if (method !== 'internal' || !selectedRm?.code) return null;
-    if (!previewUniqueSegment) return null;
     return composeIncomingLpnPreview({
-      uniqueSegment: previewUniqueSegment,
       reference: referenceOdoo,
       rmCode: selectedRm.code,
       batch,
     });
-  }, [
-    method,
-    previewUniqueSegment,
-    referenceOdoo,
-    batch,
-    selectedRm?.code,
-  ]);
+  }, [method, referenceOdoo, batch, selectedRm?.code]);
 
   const handleConfirmConfig = async () => {
     if (!scaleId || !selectedScale) {
@@ -204,40 +287,51 @@ export default function RecordingAction() {
       return;
     }
     if (method === 'odoo') {
-      if (!packageUid.trim()) {
+      const lpnRequired = odooProcess !== 'qc_sample';
+      const parsedLpn = parsePackageUidInput(packageUid);
+      if (parsedLpn.kind === 'reject') {
+        toast.error(parsedLpn.message);
+        return;
+      }
+      const lpn = parsedLpn.kind === 'ok' ? parsedLpn.uid : '';
+      if (lpnRequired && !lpn) {
         toast.error(t('pleaseFillLpn'));
         return;
+      }
+      if (odooProcess === 'qc_sample') {
+        if (!qcRecord.trim()) {
+          toast.error(t('pleaseFillQcRecord'));
+          return;
+        }
+        const tare = Number(sampleTare);
+        if (!Number.isFinite(tare) || tare < 0) {
+          toast.error(t('pleaseFillSampleTare'));
+          return;
+        }
       }
     } else if (!vendorId || !packagingId || !rmCodeId) {
       toast.error(t('pleaseSelectTareAndRm'));
       return;
     } else {
-      const draftPrint = toPrintData({
-        lpn: internalLpnPreview || 'LPN-N/A',
+      const fieldsError = getInternalIncomingFieldsError({
         referenceOdoo,
+        poNumber,
         batch,
         arrivalAt,
         expiredDate,
-        result: {
-          success: true,
-          readingId: 0,
-          packageUid: '',
-          tareWeight: selectedPackaging?.tareWeight ?? 0,
-          grossWeight: 0,
-          netWeight: 0,
-          weightStatus: 'local',
-          weighingMethod: 'internal',
-          flowType: 'incoming',
-          syncedToOdoo: false,
-        },
         vendorName: selectedVendor?.name,
-        packagingName: selectedPackaging?.name,
-        rmCode: selectedRm?.code,
         skuName: selectedRm?.name || selectedRm?.code,
       });
-      const printError = getPrintValidationError(draftPrint);
-      if (printError) {
-        toast.error(t(printError));
+      if (fieldsError) {
+        toast.error(t(fieldsError));
+        return;
+      }
+      if (batchWeighing && !batchCountValid) {
+        toast.error(t('batchQuantityInvalid'));
+        return;
+      }
+      if (!internalLpnPreview) {
+        toast.error(t('internalFieldsIncomplete'));
         return;
       }
     }
@@ -250,31 +344,39 @@ export default function RecordingAction() {
         scaleId: Number(scaleId),
         scaleName: selectedScale.name,
         ...(method === 'odoo'
-          ? { packageUid: packageUid.trim().toUpperCase() }
+          ? {
+              packageUid: (() => {
+                const parsed = parsePackageUidInput(packageUid);
+                return parsed.kind === 'ok' ? parsed.uid : undefined;
+              })(),
+            }
           : {}),
         vendorId: method === 'internal' ? Number(vendorId) : undefined,
         packagingId: method === 'internal' ? Number(packagingId) : undefined,
         rmCodeId: method === 'internal' ? Number(rmCodeId) : undefined,
+        ...(method === 'internal' && batchWeighing && batchCountValid
+          ? { batchQuantity: batchCount }
+          : {}),
         labelMetadata:
-          method === 'internal'
+          method === 'odoo'
             ? {
+                odooWeighingType: odooProcess,
+                ...(odooProcess === 'qc_sample'
+                  ? {
+                      qcRecord: qcRecord.trim(),
+                      sampleTareG: Number(sampleTare),
+                    }
+                  : {}),
+              }
+            : {
                 referenceOdoo: referenceOdoo.trim(),
+                poNumber: poNumber.trim(),
                 batch: batch.trim(),
                 arrivalAt,
                 expiredDate,
                 vendorName: selectedVendor?.name || '',
                 skuName: selectedRm?.name || selectedRm?.code || '',
-              }
-            : referenceOdoo.trim() || batch.trim() || arrivalAt || expiredDate
-              ? {
-                  referenceOdoo: referenceOdoo.trim(),
-                  batch: batch.trim(),
-                  arrivalAt,
-                  expiredDate,
-                  vendorName: selectedVendor?.name || '',
-                  skuName: selectedRm?.name || selectedRm?.code || '',
-                }
-              : undefined,
+              },
       });
       applySession(response.data);
       setLastResult(null);
@@ -306,14 +408,19 @@ export default function RecordingAction() {
     setCurrentWeight(null);
     if (clearResult) {
       setPackageUid('');
+      setQcRecord('');
+      setSampleTare('');
+      setOdooProcess('inbound');
       setReferenceOdoo('');
+      setPoNumber('');
       setBatch('');
       setArrivalAt('');
       setExpiredDate('');
       setVendorId('');
       setPackagingId('');
       setRmCodeId('');
-      setPreviewUniqueSegment('');
+      setBatchWeighing(false);
+      setBatchQuantity('2');
       setLastResult(null);
     }
   };
@@ -323,15 +430,28 @@ export default function RecordingAction() {
     const status = result.weightStatus?.toLowerCase();
     if (status === 'pass') {
       toast.success(t('weightPass') + ': ' + (result.message || ''));
+    } else if (status === 'pending') {
+      toast.success(t('sentRefreshIot'));
     } else if (status === 'local') {
       toast.success(t('savedLocally'));
     } else {
       toast.warning(t('weightFail') + ': ' + (result.message || ''));
     }
     setOdooFailure(null);
+    if (method === 'internal') {
+      queueAutoPrint(result);
+    }
+    if (result.nextSession) {
+      applySession(result.nextSession);
+      resetForm(false);
+      toast.success(t('batchNextReady'));
+      return;
+    }
     setSession(null);
     setIsWeighing(false);
     setIsConfigConfirmed(false);
+    setBatchWeighing(false);
+    setBatchQuantity('2');
     resetForm(false);
   };
 
@@ -356,10 +476,14 @@ export default function RecordingAction() {
         error.response?.data?.message ||
         error.response?.data?.error ||
         'Gagal menyimpan penimbangan';
-      if (method === 'odoo') {
-        setOdooFailure(msg);
+      if (method === 'odoo' && error.response?.status === 409) {
+        toast.warning(
+          typeof msg === 'string' && msg ? msg : t('lpnAlreadyWeighed'),
+        );
+      } else if (method === 'odoo') {
+        setOdooFailure(typeof msg === 'string' ? msg : t('sendToOdooFailed'));
       } else {
-        toast.error(msg);
+        toast.error(typeof msg === 'string' ? msg : 'Gagal menyimpan penimbangan');
       }
     } finally {
       setConfirming(false);
@@ -398,6 +522,7 @@ export default function RecordingAction() {
         await api.patch(`/readings/${lastResult.readingId}/label`, {
           packageUid: lpn,
           referenceOdoo: referenceOdoo.trim(),
+          poNumber: poNumber.trim(),
           batch: batch.trim(),
           arrivalAt,
           expiredDate: expiredDate || undefined,
@@ -429,6 +554,7 @@ export default function RecordingAction() {
     const data = toPrintData({
       lpn,
       referenceOdoo,
+      poNumber,
       batch,
       arrivalAt,
       expiredDate,
@@ -451,6 +577,7 @@ export default function RecordingAction() {
       await api.patch(`/readings/${lastResult.readingId}/label`, {
         packageUid: lpn,
         referenceOdoo: referenceOdoo.trim(),
+        poNumber: poNumber.trim(),
         batch: batch.trim(),
         arrivalAt,
         expiredDate,
@@ -463,16 +590,84 @@ export default function RecordingAction() {
     }
     flushSync(() => setPrintLabelData(data));
     window.setTimeout(() => {
-      if (!printLabelInNewWindow()) {
-        toast.error(t('printBlocked'));
-      }
+      void printRenderedLabel('manual').then((outcome) => {
+        if (outcome.ok && outcome.via === 'silent' && lastResult) {
+          markReadingPrinted(lastResult.readingId);
+          return;
+        }
+        if (!outcome.ok) {
+          toast.error(formatPrintFailure(t, outcome, data.labelProductNumber), { duration: 8000 });
+        }
+      });
+    }, 80);
+  };
+
+  const queueAutoPrint = (result: ConfirmResult) => {
+    if (!loadLabelPrinterSettings().autoPrint) return;
+    if (!beginReadingPrint(result.readingId)) return;
+    const lpn = (result.packageUid || packageUid).trim().toUpperCase();
+    const data = toPrintData({
+      lpn,
+      referenceOdoo,
+      poNumber,
+      batch,
+      arrivalAt,
+      expiredDate,
+      result,
+      vendorName: selectedVendor?.name || session?.vendor?.name,
+      packagingName: selectedPackaging?.name || session?.packaging?.name,
+      rmCode: selectedRm?.code || session?.rmCode?.code,
+      skuName:
+        selectedRm?.name ||
+        session?.rmCode?.name ||
+        selectedRm?.code ||
+        session?.rmCode?.code,
+    });
+    const errorKey = getPrintValidationError(data);
+    if (errorKey) {
+      finishReadingPrint(result.readingId, false);
+      toast.error(`${t(errorKey)}. ${t('printFixInDocuments')}`, { duration: 8000 });
+      return;
+    }
+    flushSync(() => setPrintLabelData(data));
+    window.setTimeout(() => {
+      void printRenderedLabel('auto')
+        .then((outcome) => {
+          const printed = outcome.ok && outcome.via === 'silent';
+          finishReadingPrint(result.readingId, printed);
+          if (!printed && outcome.reason !== 'skipped') {
+            toast.error(formatPrintFailure(t, outcome, data.labelProductNumber), { duration: 8000 });
+          }
+        })
+        .catch(() => finishReadingPrint(result.readingId, false));
     }, 80);
   };
 
   const canStart = !!(session && currentWeight && currentWeight.stable);
-  const packingOptions: Packaging[] = selectedVendor?.packagings || [];
+  const packingSelectOptions = useMemo(() => {
+    const selectedVendorIdNum = vendorId ? Number(vendorId) : null;
+    const ownPackagings = selectedVendor?.packagings || [];
+    const otherPackagings = allPackagings.filter(
+      (p) => p.vendorId !== selectedVendorIdNum,
+    );
+    return [
+      ...ownPackagings.map((p) => ({
+        value: String(p.id),
+        label: `${p.name} (${p.tareWeight ?? '-'} g)`,
+        keywords: selectedVendor?.name ?? '',
+      })),
+      ...otherPackagings.map((p) => ({
+        value: String(p.id),
+        label: `${p.name} (${p.tareWeight ?? '-'} g) — ${p.vendorName || 'Global'}`,
+        keywords: p.vendorName || '',
+      })),
+    ];
+  }, [vendorId, selectedVendor, allPackagings]);
   const filteredRmCodes = vendorId
-    ? rmCodes.filter((rm) => rm.vendorId === Number(vendorId))
+    ? rmCodes.filter(
+        (rm) =>
+          rm.vendorId == null || rm.vendorId === Number(vendorId),
+      )
     : [];
 
   return (
@@ -490,7 +685,7 @@ export default function RecordingAction() {
         </div>
       </div>
 
-      {lastResult && !isConfigConfirmed && (
+      {lastResult && (
         <WeighingResultCard
           result={lastResult}
           onSendToOdoo={!lastResult.syncedToOdoo ? handleSendToOdoo : undefined}
@@ -558,8 +753,8 @@ export default function RecordingAction() {
                     disabled={isConfigConfirmed}
                     onClick={() => {
                       setMethod(value);
-                      if (value === 'internal' && !previewUniqueSegment) {
-                        setPreviewUniqueSegment(previewIncomingUniqueSegment());
+                      if (value !== 'internal') {
+                        setBatchWeighing(false);
                       }
                     }}
                     className={cn(
@@ -597,7 +792,7 @@ export default function RecordingAction() {
                       value={packagingId}
                       onValueChange={setPackagingId}
                       disabled={isConfigConfirmed || !vendorId}
-                      options={packingOptions.map((packaging) => ({ value: String(packaging.id), label: `${packaging.name} (${packaging.tareWeight ?? '-'} kg)` }))}
+                      options={packingSelectOptions}
                       placeholder={t('selectPackaging')}
                       className="h-10"
                     />
@@ -610,10 +805,73 @@ export default function RecordingAction() {
                       disabled={isConfigConfirmed || !vendorId}
                       options={filteredRmCodes.map((rm) => ({
                         value: String(rm.id),
-                        label: rm.name || rm.code,
+                        label: rm.name ? `${rm.name} (${rm.code})` : rm.code,
+                        code: rm.code,
+                        keywords: rm.name ?? '',
                       }))}
                       placeholder={t('selectRmCode')}
                       className="h-10"
+                    />
+                  </div>
+                </>
+              )}
+
+              {method === 'odoo' && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-[#5d4037]">{t('odooProcess')}</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        ['inbound', 'odooProcessInbound'],
+                        ['qc_sample', 'odooProcessQc'],
+                        ['production', 'odooProcessProduction'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={isConfigConfirmed}
+                        onClick={() => setOdooProcess(value)}
+                        className={cn(
+                          'h-10 rounded-lg text-xs font-semibold border transition-all px-1',
+                          odooProcess === value
+                            ? 'brown-gradient-animated text-white border-transparent'
+                            : 'bg-white text-[#5d4037] border-[#d7ccc8]',
+                        )}
+                      >
+                        {t(label)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {method === 'odoo' && odooProcess === 'qc_sample' && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-[#5d4037]">{t('qcRecord')}</Label>
+                    <Input
+                      type="text"
+                      value={qcRecord}
+                      onChange={(e) => setQcRecord(e.target.value)}
+                      placeholder="INBOUND-QC-000161"
+                      className="h-10 font-mono"
+                      autoComplete="off"
+                      disabled={isConfigConfirmed}
+                    />
+                    <p className="text-[10px] text-[#8d6e63]">{t('qcRecordHint')}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-[#5d4037]">{t('sampleTare')}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={sampleTare}
+                      onChange={(e) => setSampleTare(e.target.value)}
+                      className="h-10 font-mono"
+                      autoComplete="off"
+                      disabled={isConfigConfirmed}
                     />
                   </div>
                 </>
@@ -625,13 +883,23 @@ export default function RecordingAction() {
                   <Input
                     type="text"
                     value={packageUid}
-                    onChange={(e) => setPackageUid(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      const next = normalizeLpnField(e.target.value);
+                      if (next.error) {
+                        toast.error(next.error);
+                        setPackageUid('');
+                        return;
+                      }
+                      setPackageUid(next.value);
+                    }}
                     placeholder="RM-BOM-31/05/2026-000011"
                     className="h-10 font-mono"
                     autoComplete="off"
                     disabled={isConfigConfirmed}
                   />
-                  <p className="text-[10px] text-[#8d6e63]">{t('lpnHint')}</p>
+                  <p className="text-[10px] text-[#8d6e63]">
+                    {odooProcess === 'qc_sample' ? t('lpnOptionalQc') : t('lpnHint')}
+                  </p>
                 </div>
               )}
 
@@ -647,6 +915,20 @@ export default function RecordingAction() {
                   disabled={isConfigConfirmed}
                   autoComplete="off"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-[#5d4037]">{t('poNumber')}</Label>
+                <Input
+                  type="text"
+                  value={poNumber}
+                  onChange={(e) => setPoNumber(e.target.value)}
+                  className="h-10 font-mono"
+                  disabled={isConfigConfirmed}
+                  autoComplete="off"
+                  placeholder="PO-..."
+                />
+                <p className="text-[10px] text-[#8d6e63]">{t('poNumberHint')}</p>
               </div>
 
               <div className="space-y-1.5">
@@ -685,37 +967,72 @@ export default function RecordingAction() {
                 <p className="text-[10px] text-[#8d6e63]">{t('expiredDateHint')}</p>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-[#5d4037]">{t('uniqueNumber')}</Label>
-                <Input
-                  type="text"
-                  value={
-                    isConfigConfirmed
-                      ? previewUniqueSegment || '—'
-                      : previewUniqueSegment || t('lpnNotSet')
-                  }
-                  readOnly
-                  className="h-10 font-mono bg-[#efebe9]"
-                  autoComplete="off"
-                />
-                <p className="text-[10px] text-[#8d6e63]">{t('uniqueNumberHint')}</p>
-              </div>
+              {!showBatchQueue && (
+                <div className="space-y-1.5">
+                  <button
+                    type="button"
+                    disabled={isConfigConfirmed}
+                    onClick={() => setBatchWeighing((current) => !current)}
+                    className={cn(
+                      'h-10 w-full rounded-lg text-sm font-semibold border transition-all',
+                      batchWeighing
+                        ? 'brown-gradient-animated text-white border-transparent'
+                        : 'bg-white text-[#5d4037] border-[#d7ccc8]',
+                    )}
+                  >
+                    {t('batchWeigh')}
+                  </button>
+                  {batchWeighing && (
+                    <>
+                      <Label className="text-xs font-medium text-[#5d4037]">{t('batchQuantity')}</Label>
+                      <Input
+                        type="number"
+                        min={2}
+                        max={30}
+                        step={1}
+                        value={batchQuantity}
+                        onChange={(e) => setBatchQuantity(e.target.value)}
+                        className="h-10 font-mono"
+                        disabled={isConfigConfirmed}
+                        autoComplete="off"
+                      />
+                      <p className="text-[10px] text-[#8d6e63]">{t('batchQuantityHint')}</p>
+                    </>
+                  )}
+                </div>
+              )}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-[#5d4037]">{t('lpn')}</Label>
-                <Input
-                  type="text"
-                  value={
-                    isConfigConfirmed
-                      ? packageUid || session?.packageUid || '—'
-                      : internalLpnPreview || '—'
-                  }
-                  readOnly
-                  className="h-10 font-mono bg-[#efebe9] break-all"
-                  autoComplete="off"
+              {showBatchQueue ? (
+                <BatchQueueList
+                  items={batchQueue}
+                  title={t('batchQueueTitle')}
+                  activeLabel={t('batchQueueActive')}
+                  pendingLabel={t('batchQueuePending')}
+                  doneLabel={t('batchQueueDone')}
                 />
-                <p className="text-[10px] text-[#8d6e63]">{t('internalLpnPreviewHint')}</p>
-              </div>
+              ) : batchWeighing ? (
+                <p className="text-[10px] text-[#8d6e63]">
+                  {t('batchWeighPendingHint').split('{count}').join(
+                    batchCountValid ? String(batchCount) : '—',
+                  )}
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-[#5d4037]">{t('lpn')}</Label>
+                  <Input
+                    type="text"
+                    value={
+                      isConfigConfirmed
+                        ? packageUid || session?.packageUid || '—'
+                        : internalLpnPreview || '—'
+                    }
+                    readOnly
+                    className="h-10 font-mono bg-[#efebe9] break-all"
+                    autoComplete="off"
+                  />
+                  <p className="text-[10px] text-[#8d6e63]">{t('internalLpnPreviewHint')}</p>
+                </div>
+              )}
                 </>
               )}
 
@@ -737,7 +1054,7 @@ export default function RecordingAction() {
               {session && (
                 <Button
                   onClick={async () => {
-                    if (!confirm(t('confirmResetSession'))) return;
+                    if (!confirm(showBatchQueue ? t('confirmResetBatch') : t('confirmResetSession'))) return;
                     try {
                       await api.patch(`/sessions/${session.id}/end`);
                       setSession(null);
@@ -766,22 +1083,52 @@ export default function RecordingAction() {
               <Card className="border-0 shadow-sm overflow-visible">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base text-[#3e2723] leading-tight">
-                    {method === 'odoo' ? t('lpn') : t('methodInternal')}
+                    {method === 'odoo'
+                      ? odooProcess === 'qc_sample'
+                        ? t('qcRecord')
+                        : t('lpn')
+                      : t('methodInternal')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-4 pb-6 px-6 space-y-1">
                   <p className="text-lg font-mono font-bold text-[#3e2723] break-all">
-                    {packageUid || session?.packageUid || t('lpnNotSet')}
+                    {method === 'odoo' && odooProcess === 'qc_sample'
+                      ? qcRecord || t('lpnNotSet')
+                      : packageUid || session?.packageUid || t('lpnNotSet')}
                   </p>
+                  {method === 'odoo' && odooProcess === 'qc_sample' && (
+                    <p className="text-sm text-[#5d4037]">
+                      {t('sampleTare')}: {sampleTare || '—'}
+                      {(packageUid || session?.packageUid) &&
+                        ` · ${t('lpn')}: ${packageUid || session?.packageUid}`}
+                    </p>
+                  )}
                   {method === 'internal' && selectedPackaging && (
                     <p className="text-sm text-[#5d4037]">
-                      {t('tare')}: {selectedPackaging.tareWeight} kg · {t('rmCode')}:{' '}
+                      {t('tare')}: {selectedPackaging.tareWeight} g · {t('rmCode')}:{' '}
                       {selectedRm?.name || session?.rmCode?.name || selectedRm?.code || session?.rmCode?.code}
                     </p>
                   )}
                   <p className="text-xs text-[#8d6e63] mt-2">
-                    {method === 'odoo' ? t('odooTareNote') : t('internalTareNote')}
+                    {method === 'odoo'
+                      ? odooProcess === 'qc_sample'
+                        ? t('odooQcNote')
+                        : odooProcess === 'production'
+                          ? t('odooProductionNote')
+                          : t('odooTareNote')
+                      : t('internalTareNote')}
                   </p>
+                  {showBatchQueue && (
+                    <div className="pt-3">
+                      <BatchQueueList
+                        items={batchQueue}
+                        title={t('batchQueueTitle')}
+                        activeLabel={t('batchQueueActive')}
+                        pendingLabel={t('batchQueuePending')}
+                        doneLabel={t('batchQueueDone')}
+                      />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

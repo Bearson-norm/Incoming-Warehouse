@@ -92,7 +92,13 @@ Saat operator mengonfirmasi penimbangan, API mengirim data ke Odoo:
 
 - **Endpoint**: `POST {ODOO_BASE_URL}/api/wms/iot/weight`
 - **Header**: `X-FOOM-IoT-Key: {ODOO_IOT_API_KEY}`
-- **Body**: `{ "package_uid": "<LPN>", "gross_weight": <kg> }`
+- **Satuan**: gram
+- **Body** tergantung proses yang dipilih di halaman Incoming (metode Odoo):
+  - Incoming: `{ "package_uid": "<LPN>", "gross_weight": <g>, "weighing_type": "inbound", "device_uid": "<nama timbangan>" }`
+  - QC sample: `{ "weighing_type": "qc_sample", "qc_reference": "<nomor QC>", "gross_weight": <g>, "tare_weight": <g>, "device_uid": "<nama timbangan>" }` (`package_uid` opsional)
+  - Production: `{ "package_uid": "<LPN>", "gross_weight": <g>, "weighing_type": "production", "device_uid": "<nama timbangan>" }`
+
+Halaman INTRANS tetap mengirim `{ "package_uid": "<LPN>", "gross_weight": <g> }` tanpa `weighing_type`. Metode Internal tidak memanggil API ini.
 
 ### Via UI (disarankan — override langsung aktif)
 
@@ -120,11 +126,12 @@ API key dikonfigurasi di Odoo: **Settings > Technical > System Parameters** (`fo
 
 ### Alur operator (Recording Action)
 
-1. Scan atau ketik **nomor LPN** (barcode UID pada label fisik).
-2. Klik **Konfirmasi**.
-3. Tunggu berat **stabil** di timbangan, lalu **Mulai Penimbangan**.
-4. Klik **Konfirmasi Penimbangan** — data dikirim ke Odoo; tampil hasil **PASS** / **FAIL** (tare/netto dari Odoo).
-5. Tidak ada cetak label LPN dari halaman ini.
+1. Pilih metode **Odoo**, lalu proses **Incoming**, **QC sample**, atau **Production**.
+2. Incoming dan Production: scan atau ketik **nomor LPN** (QR LPN atau kode polos). QC sample: isi **nomor QC** dan **tare wadah kosong**; LPN opsional.
+3. Klik **Konfirmasi**.
+4. Tunggu berat **stabil** di timbangan, lalu **Mulai Penimbangan**.
+5. Klik **Konfirmasi Penimbangan**. Incoming menampilkan **PASS** / **FAIL**. QC sample dan Production menampilkan permintaan menekan **Refresh IoT** di Odoo.
+6. Tidak ada cetak label LPN dari halaman ini.
 
 ### Migrasi database
 
@@ -153,6 +160,21 @@ npm run package:electron:win:installer  # NSIS Setup .exe
 ```
 
 Setara di `electron-app/`: `package:win`, `package:win:unpacked`, `package:win:portable`, `package:win:installer` (script `scripts/package-win-no-sign.ps1` dengan `-Target all|dir|portable|nsis`).
+
+#### Dev vs win-unpacked (perubahan UI tidak muncul?)
+
+| Mode | Perintah | Yang ter-update |
+|------|----------|-----------------|
+| **Development** | `npm run dev:electron` | Hanya Vite di `localhost:4234` — **bukan** folder `release/win-unpacked` |
+| **Package** | `npm run package:electron:win:unpacked` | `Software/release/win-unpacked/` (UI di `resources/web/`) |
+
+Checklist jika win-unpacked terasa “lama”:
+
+1. **Tutup** semua jendela Incoming Warehouse / hentikan `dev:electron` sebelum package (file lock).
+2. Jalankan package dari **`Software/`** (bukan dari `infra/`): `npm run package:electron:win:unpacked`.
+3. Pastikan log berakhir **`[OK] Package created`** dan path **`Software\release\win-unpacked`** — jalankan **exe di folder itu**, bukan salinan lama di USB/Desktop.
+4. Cek timestamp **`release\win-unpacked\resources\web\index.html`** (script package menampilkan peringatan jika tidak diperbarui).
+5. Jika build API gagal (`masterDataAuditEvent` / `nest build`), package tidak membawa kode baru — perbaiki error lalu ulangi (proyek memakai `tsconfig.build.json` agar `scripts/` tidak ikut `nest build`).
 
 Output utama:
 

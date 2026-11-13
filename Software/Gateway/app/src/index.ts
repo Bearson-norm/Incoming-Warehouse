@@ -292,9 +292,8 @@ class WeighingGateway {
     const result = this.parseWeightSmart(trimmed);
 
     if (result !== null) {
-      // Berat diterima dalam gram, konversi ke kg untuk payload
-      const weightKg = result.unit === 'g' ? result.weight / 1000 : result.weight;
-      this.processWeightData(weightKg, result.stable, trimmed, result.stabilityKnown ?? true);
+      // Parser sudah mengembalikan gram. Payload live memakai gram.
+      this.processWeightData(result.weight, result.stable, trimmed, result.stabilityKnown ?? true);
     }
     // Jika tidak bisa di-parse, tidak log error (passive listener)
   }
@@ -306,13 +305,13 @@ class WeighingGateway {
     rawLine: string,
     stabilityKnown: boolean = true,
   ) {
-    console.log(`⚖️  Parsed weight: ${weight} kg (stable: ${stable})`);
+    console.log(`⚖️  Parsed weight: ${weight} g (stable: ${stable})`);
 
     const payload: WeightUpdatePayload = {
       gatewayId: this.gatewayId,
       readingId: uuidv4(),
       weight,
-      unit: 'kg',
+      unit: 'g',
       stable,
       rawLine,
       capturedAt: new Date().toISOString(),
@@ -326,7 +325,7 @@ class WeighingGateway {
         const timeSinceUnchanged = Date.now() - this.lastStableWeight.timestamp;
         if (timeSinceUnchanged >= this.config.stable.windowMs) {
           payload.stable = true;
-          console.log(`Sending software-stable weight: ${weight} kg`);
+          console.log(`Sending software-stable weight: ${weight} g`);
           this.sendWeightUpdate(payload);
           return;
         }
@@ -344,7 +343,7 @@ class WeighingGateway {
       if (this.lastStableWeight && this.lastStableWeight.weight === weight) {
         const timeSinceStable = Date.now() - this.lastStableWeight.timestamp;
         if (timeSinceStable >= this.config.stable.windowMs) {
-          console.log(`✅ Sending stable weight: ${weight} kg`);
+          console.log(`✅ Sending stable weight: ${weight} g`);
           this.sendWeightUpdate(payload);
         }
       } else {
@@ -353,7 +352,7 @@ class WeighingGateway {
     } else {
       this.lastStableWeight = null;
       // Send unstable readings immediately
-      console.log(`📤 Sending unstable weight: ${weight} kg`);
+      console.log(`📤 Sending unstable weight: ${weight} g`);
       this.sendWeightUpdate(payload);
     }
   }
@@ -530,10 +529,10 @@ class WeighingGateway {
 
   private sendWeightUpdate(payload: WeightUpdatePayload) {
     if (this.socket && this.socket.connected) {
-      console.log(`📤 Sending to WebSocket: weight=${payload.weight}kg, stable=${payload.stable}`);
+      console.log(`📤 Sending to WebSocket: weight=${payload.weight}g, stable=${payload.stable}`);
       this.socket.emit(SocketEvents.WEIGHT_UPDATE, payload);
     } else {
-      console.warn(`⚠️  Socket not connected. Buffering weight update: ${payload.weight}kg`);
+      console.warn(`⚠️  Socket not connected. Buffering weight update: ${payload.weight}g`);
       // Buffer for later
       this.offlineBuffer = payload;
     }

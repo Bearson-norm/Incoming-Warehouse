@@ -25,13 +25,36 @@ function resolveApiMainFile() {
   return candidates.find((p) => fs.existsSync(p));
 }
 
+function latestMtimeMs(dir) {
+  let latest = 0;
+  if (!fs.existsSync(dir)) {
+    return latest;
+  }
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      latest = Math.max(latest, latestMtimeMs(full));
+    } else if (entry.isFile()) {
+      latest = Math.max(latest, fs.statSync(full).mtimeMs);
+    }
+  }
+  return latest;
+}
+
 function ensureApiBuild() {
   let apiMainFile = resolveApiMainFile();
-  if (apiMainFile) {
+  const srcLatest = latestMtimeMs(path.join(apiPath, 'src'));
+  const buildMtime = apiMainFile ? fs.statSync(apiMainFile).mtimeMs : 0;
+
+  if (apiMainFile && buildMtime >= srcLatest) {
     return apiMainFile;
   }
 
-  console.log('[Electron] API build belum ada; building once...');
+  console.log(
+    apiMainFile
+      ? '[Electron] API source berubah sejak build terakhir; rebuilding...'
+      : '[Electron] API build belum ada; building once...'
+  );
   execSync('npm run build', {
     cwd: apiPath,
     stdio: 'inherit',

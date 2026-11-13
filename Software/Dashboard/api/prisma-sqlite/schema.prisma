@@ -98,6 +98,14 @@ model WeighSession {
   weighingStarted Boolean   @default(false)
   /// Snapshot field label (legacy cetak label)
   labelMetadata   String?
+  /// Shared id for an internal incoming batch queue. Null for a single session.
+  batchGroupId    String?
+  /// 1-based position inside the batch queue.
+  batchSequence   Int?
+  /// How many items were created in the batch.
+  batchSize       Int?
+  /// 'active' | 'pending' | 'done'. Null when the session is not part of a batch.
+  queueStatus     String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -113,13 +121,14 @@ model WeighSession {
   @@index([userId, endedAt])
   @@index([weighingMethod])
   @@index([flowType])
+  @@index([batchGroupId])
 }
 
 model WeighReading {
   id             Int       @id @default(autoincrement())
   sessionId      Int
   weight         Float
-  unit           String    @default("kg")
+  unit           String    @default("g")
   stable         Boolean
   rawLine        String?
   capturedAt     DateTime  @default(now())

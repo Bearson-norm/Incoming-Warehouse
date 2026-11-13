@@ -358,7 +358,7 @@ export default function Databases() {
                                   </span>
                                   <span className="text-xs text-[#8d6e63] ml-2">
                                     ({t("tare")}: {packaging.tareWeight ?? "-"}{" "}
-                                    kg)
+                                    g)
                                   </span>
                                   <span className="block text-xs text-[#8d6e63]">
                                     Dibentuk{" "}
@@ -454,7 +454,7 @@ export default function Databases() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t("rmCode")}</TableHead>
+                    <TableHead>{t("rmMaterialCode")}</TableHead>
                     <TableHead>{t("rmName")}</TableHead>
                     <TableHead>{t("vendor")}</TableHead>
                     <TableHead>Prod Area</TableHead>
@@ -579,10 +579,10 @@ export default function Databases() {
               />
             </div>
             <div className="space-y-2">
-              <Label>{t("tareWeight")} (kg)</Label>
+              <Label>{t("tareWeight")} (g)</Label>
               <Input
                 type="number"
-                step="0.01"
+                step="0.1"
                 value={tareWeight}
                 onChange={(e) => setTareWeight(e.target.value)}
               />
@@ -609,7 +609,7 @@ export default function Databases() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>{t("rmCode")}</Label>
+              <Label>{t("rmMaterialCode")}</Label>
               <Input
                 value={rmCode}
                 onChange={(e) => setRmCode(e.target.value)}

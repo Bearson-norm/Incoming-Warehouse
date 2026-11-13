@@ -10,6 +10,7 @@ import api from '../services/api';
 import { toast } from 'sonner';
 import { Search, Layers } from 'lucide-react';
 import { Reading, RmCode } from '../types/weighing';
+import { readingFlowLabelKey } from '../utils/readingFlowLabel';
 
 interface BreakdownResponse {
   packageUid: string;
@@ -128,7 +129,7 @@ export default function LpnBreakdown() {
               <div>
                 <p className="text-xs text-[#8d6e63]">{t('net')} / {t('tare')}</p>
                 <p className="font-medium">
-                  {data.summary.latestNet ?? '-'} / {data.summary.latestTare ?? '-'} kg
+                  {data.summary.latestNet ?? '-'} / {data.summary.latestTare ?? '-'} g
                 </p>
               </div>
               <div>
@@ -171,7 +172,7 @@ export default function LpnBreakdown() {
                         <TableCell>{new Date(reading.capturedAt).toLocaleDateString()}</TableCell>
                         <TableCell>{new Date(reading.capturedAt).toLocaleTimeString()}</TableCell>
                         <TableCell>
-                          {reading.session.flowType === 'intrans' ? t('intrans') : t('incoming')}
+                          {t(readingFlowLabelKey(reading))}
                         </TableCell>
                         <TableCell>
                           {reading.session.weighingMethod === 'internal'

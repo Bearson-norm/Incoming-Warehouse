@@ -515,14 +515,14 @@ npm run dev
 
 ### Format Data Timbangan yang Didukung
 
-Gateway mendukung berbagai format data timbangan:
-- `ST,+00170.5g` → 0.1705 kg (stable)
-- `12.34 kg` → 12.34 kg
-- `ST 12.34` → 12.34 kg (stable)
-- `001705` → 170.5 g → 0.1705 kg (format 7 digit)
+Gateway mendukung berbagai format data timbangan. Angka yang dikirim ke aplikasi selalu dalam gram:
+- `ST,+00170.5g` → 170.5 g (stable)
+- `12.34 kg` → 12340 g
+- `ST 12.34` → 12.34 g (stable, satuan default gram)
+- `001705` → 170.5 g (format 7 digit)
 
 Gateway akan otomatis:
-- **Mengkonversi gram ke kilogram** jika terdeteksi unit 'g' atau 'gram'
+- **Menyimpan hasil parse dalam gram** (pembacaan kilogram dikalikan 1000)
 - **Mendeteksi berat stabil** berdasarkan pattern yang dikonfigurasi
 - **Mengirim data real-time** ke API server via WebSocket
 

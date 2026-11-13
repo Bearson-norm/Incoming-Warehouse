@@ -2,7 +2,10 @@
 export interface SessionLabelMetadata {
   packageUid?: string;
   referenceOdoo?: string;
+  /** Nomor PO (internal incoming). */
+  poNumber?: string;
   vendorName?: string;
+  /** @deprecated use poNumber */
   poAdj?: string;
   namaRmPm?: string;
   skuName?: string;
@@ -12,6 +15,13 @@ export interface SessionLabelMetadata {
   expiredDate?: string;
   /** Legacy key, read-only compatibility for records created before expiredDate. */
   dateIncoming?: string;
-  /** First LPN segment (short token + YYYY), set by server for internal incoming. */
+  /** Legacy unique LPN prefix; not set for new internal LPNs. */
   lpnUniqueSegment?: string;
+  /** Incoming Odoo process: inbound | qc_sample | production */
+  odooWeighingType?: string;
+  qcRecord?: string;
+  /** Incoming Odoo QC sample tare, in grams. */
+  sampleTareG?: number;
+  /** @deprecated kilograms; read-only compatibility before the gram migration. */
+  sampleTareKg?: number;
 }

@@ -8,6 +8,7 @@
  */
 import { execSync } from 'child_process';
 import { PrismaClient } from '@prisma/client';
+import { labelMetadataToGrams, toGrams } from '../src/common/weight-unit';
 
 type Row = Record<string, unknown>;
 
@@ -63,14 +64,19 @@ async function main() {
     }
 
     const packagings = sqliteJson(sqlitePath, 'SELECT * FROM Packaging');
+    const sessions = sqliteJson(sqlitePath, 'SELECT * FROM WeighSession');
+    const readings = sqliteJson(sqlitePath, 'SELECT * FROM WeighReading');
+    const legacyKilograms = sourceStillKilograms(readings, sessions);
     const packagingIdMap = new Map<number, number>();
     for (const packaging of packagings) {
+      const tare =
+        packaging.tareWeight == null ? null : Number(packaging.tareWeight);
       const created = await prisma.packaging.create({
         data: {
           vendorId: vendorIdMap.get(Number(packaging.vendorId))!,
           name: String(packaging.name),
           tareWeight:
-            packaging.tareWeight == null ? null : Number(packaging.tareWeight),
+            tare == null ? null : legacyKilograms ? tare * 1000 : tare,
           metadata: packaging.metadata == null ? null : String(packaging.metadata),
         },
       });
@@ -78,7 +84,6 @@ async function main() {
     }
 
     const sqliteUsers = new Map(users.map((u) => [Number(u.id), String(u.username)]));
-    const sessions = sqliteJson(sqlitePath, 'SELECT * FROM WeighSession');
     const sessionIdMap = new Map<number, number>();
     for (const session of sessions) {
       const username = sqliteUsers.get(Number(session.userId));
@@ -100,23 +105,27 @@ async function main() {
           autosaveEnabled: Boolean(session.autosaveEnabled),
           weighingStarted: Boolean(session.weighingStarted),
           labelMetadata:
-            session.labelMetadata == null ? null : String(session.labelMetadata),
+            session.labelMetadata == null
+              ? null
+              : labelMetadataToGrams(String(session.labelMetadata)) ?? null,
         },
       });
       sessionIdMap.set(Number(session.id), created.id);
     }
 
-    const readings = sqliteJson(sqlitePath, 'SELECT * FROM WeighReading');
     for (const reading of readings) {
       const sessionId = sessionIdMap.get(Number(reading.sessionId));
       if (!sessionId) {
         continue;
       }
+      const sourceUnit = String(reading.unit || 'kg');
+      const asGrams = (value: unknown) =>
+        value == null ? null : toGrams(Number(value), sourceUnit);
       await prisma.weighReading.create({
         data: {
           sessionId,
-          weight: Number(reading.weight),
-          unit: String(reading.unit || 'kg'),
+          weight: toGrams(Number(reading.weight), sourceUnit),
+          unit: 'g',
           stable: Boolean(reading.stable),
           rawLine: reading.rawLine == null ? null : String(reading.rawLine),
           capturedAt: asDate(reading.capturedAt) ?? new Date(),
@@ -125,10 +134,9 @@ async function main() {
           odooLogId: reading.odooLogId == null ? null : Number(reading.odooLogId),
           odooPackageId:
             reading.odooPackageId == null ? null : Number(reading.odooPackageId),
-          grossWeight:
-            reading.grossWeight == null ? null : Number(reading.grossWeight),
-          tareWeight: reading.tareWeight == null ? null : Number(reading.tareWeight),
-          netWeight: reading.netWeight == null ? null : Number(reading.netWeight),
+          grossWeight: asGrams(reading.grossWeight),
+          tareWeight: asGrams(reading.tareWeight),
+          netWeight: asGrams(reading.netWeight),
           weightStatus:
             reading.weightStatus == null ? null : String(reading.weightStatus),
           odooMessage: reading.odooMessage == null ? null : String(reading.odooMessage),
@@ -149,3 +157,18 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+function sourceStillKilograms(readings: Row[], sessions: Row[]): boolean {
+  if (
+    readings.some((reading) => {
+      const unit = String(reading.unit ?? 'kg').trim().toLowerCase();
+      return unit === '' || unit === 'kg';
+    })
+  ) {
+    return true;
+  }
+  return sessions.some((session) => {
+    const meta = String(session.labelMetadata || '');
+    return meta.includes('"sampleTareKg"') && !meta.includes('"sampleTareG"');
+  });
+}

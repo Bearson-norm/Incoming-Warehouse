@@ -45,13 +45,17 @@ console.log('[stage-electron-resources] Preparing staging folder for packaging..
 
 run('node scripts/prepare-pack-deps.js', electronAppPath);
 
-const apiDist = path.join(apiPath, 'dist', 'src', 'main.js');
+const apiMainCandidates = [
+  path.join(apiPath, 'dist', 'src', 'main.js'),
+  path.join(apiPath, 'dist', 'main.js'),
+];
+const apiDist = apiMainCandidates.find((p) => fs.existsSync(p));
 const gatewayDist = path.join(gatewayPath, 'dist', 'index.js');
 if (!fs.existsSync(path.join(apiPath, 'prisma-sqlite', 'schema.prisma'))) {
   throw new Error('Missing Dashboard/api/prisma-sqlite/schema.prisma (required for local SQLite)');
 }
-if (!fs.existsSync(apiDist)) {
-  throw new Error(`Build API first: missing ${apiDist}`);
+if (!apiDist) {
+  throw new Error(`Build API first: missing dist/src/main.js or dist/main.js under ${apiPath}`);
 }
 if (!fs.existsSync(gatewayDist)) {
   throw new Error(`Build Gateway first: missing ${gatewayDist}`);

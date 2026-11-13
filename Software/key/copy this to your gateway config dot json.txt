@@ -1,0 +1,19 @@
+{
+  "serial": {
+    "port": "COM16",
+    "baudRate": 9600,
+    "parity": "none",
+    "dataBits": 8,
+    "stopBits": 1,
+    "autoDetect": false
+  },
+  "server": {
+    "url": "http://localhost:4123",
+    "apiKey": "24317fd33b2ef987d87ffcbc392d660af0acee1ea568004fca7b811326bfacfc"
+  },
+  "stable": {
+    "windowMs": 1000,
+    "pattern": "ST|STABLE|S",
+    "unstablePattern": "US|UNSTABLE|U"
+  }
+}

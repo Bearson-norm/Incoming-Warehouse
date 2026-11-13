@@ -28,14 +28,20 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Printer,
   Upload,
   Layers,
   Pencil,
 } from 'lucide-react';
-import PrintLabel, { PrintLabelData, printLabelInNewWindow } from '../components/PrintLabel';
+import PrintLabel, { PrintLabelData } from '../components/PrintLabel';
+import { getInternalIncomingFieldsError } from '../utils/internalIncomingFieldValidation';
 import { getPrintValidationError } from '../utils/printLabelValidation';
+import { formatPrintFailure, markReadingPrinted, printRenderedLabel } from '../utils/printLabelJob';
 import { ConfirmResult, parseLabelMetadata, Reading, readingLpn } from '../types/weighing';
+import { readingFlowLabelKey } from '../utils/readingFlowLabel';
+
+type FlowFilter = 'all' | 'incoming' | 'intrans' | 'qc_sample' | 'production';
 
 function readingToPrintData(reading: Reading): PrintLabelData {
   const meta = parseLabelMetadata(reading.session.labelMetadata);
@@ -52,9 +58,15 @@ function readingToPrintData(reading: Reading): PrintLabelData {
     packagingName: reading.session.packaging?.name || '',
     tareWeight: reading.tareWeight ?? reading.session.packaging?.tareWeight ?? 0,
     weight: reading.grossWeight ?? reading.weight,
-    unit: reading.unit || 'kg',
+    unit: reading.unit || 'g',
     capturedAt: reading.capturedAt,
     referenceOdoo: String(meta.referenceOdoo || ''),
+    poNumber:
+      typeof meta.poNumber === 'string'
+        ? meta.poNumber
+        : typeof meta.poAdj === 'string'
+          ? meta.poAdj
+          : '',
     batch: String(meta.batch || ''),
     labelProductNumber: lpn,
     skuName:
@@ -67,14 +79,36 @@ function readingToPrintData(reading: Reading): PrintLabelData {
   };
 }
 
+interface ReadingGroup {
+  poNumber: string;
+  latestIncomingAt: string;
+  count: number;
+  items: Reading[];
+}
+
+function dayStartIso(value: string): string {
+  return new Date(value).toISOString();
+}
+
+function dayEndExclusiveIso(value: string): string {
+  const end = new Date(value);
+  end.setDate(end.getDate() + 1);
+  return end.toISOString();
+}
+
 export default function RecordDocuments() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [readings, setReadings] = useState<Reading[]>([]);
-  const [searchDate, setSearchDate] = useState('');
+  const [groups, setGroups] = useState<ReadingGroup[]>([]);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [capped, setCapped] = useState(false);
+  const [searchStart, setSearchStart] = useState('');
+  const [searchEnd, setSearchEnd] = useState('');
   const [searchLpn, setSearchLpn] = useState('');
   const [appliedLpn, setAppliedLpn] = useState('');
-  const [flowType, setFlowType] = useState<'all' | 'incoming' | 'intrans'>('all');
+  const [searchPo, setSearchPo] = useState('');
+  const [appliedPo, setAppliedPo] = useState('');
+  const [flowType, setFlowType] = useState<FlowFilter>('all');
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -84,35 +118,41 @@ export default function RecordDocuments() {
   const [editReading, setEditReading] = useState<Reading | null>(null);
   const [editLpn, setEditLpn] = useState('');
   const [editReferenceOdoo, setEditReferenceOdoo] = useState('');
+  const [editPoNumber, setEditPoNumber] = useState('');
   const [editBatch, setEditBatch] = useState('');
   const [editArrivalAt, setEditArrivalAt] = useState('');
   const [editExpiredDate, setEditExpiredDate] = useState('');
-  const limit = 50;
+  const limit = 20;
 
   useEffect(() => {
     loadReadings();
-  }, [searchDate, page, appliedLpn, flowType]);
+  }, [searchStart, searchEnd, page, appliedLpn, appliedPo, flowType]);
+
+  const applySearch = () => {
+    setPage(1);
+    setAppliedLpn(searchLpn);
+    setAppliedPo(searchPo);
+  };
 
   const loadReadings = async () => {
     setLoading(true);
     try {
-      const params: Record<string, unknown> = { page, limit };
-      if (searchDate) {
-        params.startDate = new Date(searchDate).toISOString();
-        const endDate = new Date(searchDate);
-        endDate.setDate(endDate.getDate() + 1);
-        params.endDate = endDate.toISOString();
-      }
+      const params: Record<string, unknown> = { page, limit, groupBy: 'po', stable: true };
+      if (searchStart) params.startDate = dayStartIso(searchStart);
+      if (searchEnd) params.endDate = dayEndExclusiveIso(searchEnd);
       if (appliedLpn.trim()) {
         params.packageUid = appliedLpn.trim();
+      }
+      if (appliedPo.trim()) {
+        params.poNumber = appliedPo.trim();
       }
       if (flowType !== 'all') {
         params.flowType = flowType;
       }
 
       const response = await api.get('/readings', { params });
-      const stableReadings = (response.data.data || []).filter((r: Reading) => r.stable);
-      setReadings(stableReadings);
+      setGroups(response.data.groups || []);
+      setCapped(Boolean(response.data.meta?.capped));
       setTotal(response.data.meta?.total || 0);
       setTotalPages(response.data.meta?.totalPages || 1);
     } catch (error) {
@@ -130,6 +170,13 @@ export default function RecordDocuments() {
     setEditReferenceOdoo(
       typeof meta.referenceOdoo === 'string' ? meta.referenceOdoo : '',
     );
+    setEditPoNumber(
+      typeof meta.poNumber === 'string'
+        ? meta.poNumber
+        : typeof meta.poAdj === 'string'
+          ? meta.poAdj
+          : '',
+    );
     setEditBatch(typeof meta.batch === 'string' ? meta.batch : '');
     setEditArrivalAt(typeof meta.arrivalAt === 'string' ? meta.arrivalAt : '');
     setEditExpiredDate(
@@ -143,10 +190,34 @@ export default function RecordDocuments() {
 
   const saveEdit = async () => {
     if (!editReading) return;
+    const isInternalIncoming =
+      editReading.session.flowType === 'incoming' &&
+      editReading.session.weighingMethod === 'internal';
+    if (isInternalIncoming) {
+      const meta = parseLabelMetadata(editReading.session.labelMetadata);
+      const fieldsError = getInternalIncomingFieldsError({
+        referenceOdoo: editReferenceOdoo,
+        poNumber: editPoNumber,
+        batch: editBatch,
+        arrivalAt: editArrivalAt,
+        expiredDate: editExpiredDate,
+        vendorName:
+          editReading.session.vendor?.name || String(meta.vendorName || ''),
+        skuName:
+          editReading.session.rmCode?.name ||
+          editReading.session.rmCode?.code ||
+          String(meta.skuName || ''),
+      });
+      if (fieldsError) {
+        toast.error(t(fieldsError));
+        return;
+      }
+    }
     try {
       await api.patch(`/readings/${editReading.id}/label`, {
         packageUid: editLpn.trim().toUpperCase() || undefined,
         referenceOdoo: editReferenceOdoo.trim(),
+        poNumber: editPoNumber.trim(),
         batch: editBatch.trim(),
         arrivalAt: editArrivalAt || '',
         expiredDate: editExpiredDate || '',
@@ -182,9 +253,15 @@ export default function RecordDocuments() {
     }
     flushSync(() => setPrintLabelData(data));
     window.setTimeout(() => {
-      if (!printLabelInNewWindow()) {
-        toast.error(t('printBlocked'));
-      }
+      void printRenderedLabel('manual').then((outcome) => {
+        if (outcome.ok && outcome.via === 'silent') {
+          markReadingPrinted(reading.id);
+          return;
+        }
+        if (!outcome.ok) {
+          toast.error(formatPrintFailure(t, outcome, data.labelProductNumber), { duration: 8000 });
+        }
+      });
     }, 80);
   };
 
@@ -232,30 +309,51 @@ export default function RecordDocuments() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-4 pb-6 px-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-[#5d4037]">{t('lpn')}</label>
               <Input
                 value={searchLpn}
                 onChange={(e) => setSearchLpn(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setPage(1);
-                    setAppliedLpn(searchLpn);
-                  }
+                  if (e.key === 'Enter') applySearch();
                 }}
                 placeholder={t('lpn')}
                 className="h-10 font-mono"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-[#5d4037]">{t('searchByDate')}</label>
+              <label className="text-xs font-medium text-[#5d4037]">{t('poNumber')}</label>
+              <Input
+                value={searchPo}
+                onChange={(e) => setSearchPo(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') applySearch();
+                }}
+                placeholder={t('poNumber')}
+                className="h-10 font-mono"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-[#5d4037]">{t('dateFrom')}</label>
               <Input
                 type="date"
-                value={searchDate}
+                value={searchStart}
                 onChange={(e) => {
                   setPage(1);
-                  setSearchDate(e.target.value);
+                  setSearchStart(e.target.value);
+                }}
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-[#5d4037]">{t('dateTo')}</label>
+              <Input
+                type="date"
+                value={searchEnd}
+                onChange={(e) => {
+                  setPage(1);
+                  setSearchEnd(e.target.value);
                 }}
                 className="h-10"
               />
@@ -266,7 +364,7 @@ export default function RecordDocuments() {
                 value={flowType}
                 onValueChange={(v) => {
                   setPage(1);
-                  setFlowType(v as 'all' | 'incoming' | 'intrans');
+                  setFlowType(v as FlowFilter);
                 }}
               >
                 <SelectTrigger className="h-10">
@@ -275,16 +373,15 @@ export default function RecordDocuments() {
                 <SelectContent>
                   <SelectItem value="all">{t('allFlows')}</SelectItem>
                   <SelectItem value="incoming">{t('incoming')}</SelectItem>
+                  <SelectItem value="qc_sample">{t('odooProcessQc')}</SelectItem>
+                  <SelectItem value="production">{t('odooProcessProduction')}</SelectItem>
                   <SelectItem value="intrans">{t('intrans')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-end">
               <Button
-                onClick={() => {
-                  setPage(1);
-                  setAppliedLpn(searchLpn);
-                }}
+                onClick={applySearch}
                 className="h-10 brown-gradient-animated text-white"
               >
                 <Search className="w-4 h-4 mr-2" />
@@ -305,15 +402,43 @@ export default function RecordDocuments() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-4 pb-6 px-6">
+          {capped && (
+            <p className="text-xs text-[#8d6e63] mb-3">{t('readingsCapped')}</p>
+          )}
           {loading ? (
             <div className="text-center py-12">
               <div className="inline-block w-8 h-8 border-2 border-[#8d6e63] border-t-transparent rounded-full animate-spin mb-3" />
               <p className="text-sm text-[#8d6e63]">Loading...</p>
             </div>
-          ) : readings.length > 0 ? (
+          ) : groups.length > 0 ? (
             <>
-              <div className="overflow-x-auto -mx-6 px-6">
-                <Table>
+              <div className="space-y-4">
+                {groups.map((group) => {
+                  const groupKey = group.poNumber || '__none__';
+                  const open = !collapsed[groupKey];
+                  return (
+                    <div key={groupKey} className="rounded-lg border border-[#d7ccc8] bg-white">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                        onClick={() =>
+                          setCollapsed((current) => ({ ...current, [groupKey]: !current[groupKey] }))
+                        }
+                      >
+                        <ChevronDown className={`w-4 h-4 text-[#6d4c41] ${open ? '' : '-rotate-90'}`} />
+                        <span className="font-semibold text-[#3e2723]">
+                          {group.poNumber || t('noPoGroup')}
+                        </span>
+                        <span className="text-xs text-[#6d4c41] bg-[#f5ebe0] px-2 py-0.5 rounded-full">
+                          {t('poGroupCount').split('{count}').join(String(group.count))}
+                        </span>
+                        <span className="ml-auto text-xs text-[#8d6e63]">
+                          {t('poGroupLatest')}: {new Date(group.latestIncomingAt).toLocaleString()}
+                        </span>
+                      </button>
+                      {open && (
+                        <div className="overflow-x-auto px-2 pb-3">
+                          <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t('date')}</TableHead>
@@ -332,7 +457,7 @@ export default function RecordDocuments() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {readings.map((reading) => {
+                    {group.items.map((reading) => {
                       const gross = reading.grossWeight ?? reading.weight;
                       const tare =
                         reading.tareWeight ?? reading.session.packaging?.tareWeight ?? null;
@@ -358,7 +483,7 @@ export default function RecordDocuments() {
                             {new Date(reading.capturedAt).toLocaleTimeString()}
                           </TableCell>
                           <TableCell className="text-sm">
-                            {reading.session.flowType === 'intrans' ? t('intrans') : t('incoming')}
+                            {t(readingFlowLabelKey(reading))}
                           </TableCell>
                           <TableCell className="text-sm">
                             {reading.session.weighingMethod === 'internal'
@@ -433,6 +558,11 @@ export default function RecordDocuments() {
                     })}
                   </TableBody>
                 </Table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <div className="flex items-center justify-between mt-4">
                 <p className="text-xs text-[#8d6e63]">
@@ -479,7 +609,17 @@ export default function RecordDocuments() {
                 className="font-mono"
                 value={editLpn}
                 onChange={(e) => setEditLpn(e.target.value.toUpperCase())}
+                placeholder={
+                  editReading?.session.weighingMethod === 'internal' &&
+                  !editLpn.trim()
+                    ? t('lpnGeneratedOnSave')
+                    : undefined
+                }
               />
+              {editReading?.session.weighingMethod === 'internal' &&
+                !editLpn.trim() && (
+                  <p className="text-xs text-[#8d6e63]">{t('lpnGeneratedOnSave')}</p>
+                )}
             </div>
             <div className="space-y-2">
               <Label>{t('referenceOdoo')}</Label>
@@ -487,6 +627,14 @@ export default function RecordDocuments() {
                 className="font-mono"
                 value={editReferenceOdoo}
                 onChange={(e) => setEditReferenceOdoo(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('poNumber')}</Label>
+              <Input
+                className="font-mono"
+                value={editPoNumber}
+                onChange={(e) => setEditPoNumber(e.target.value)}
               />
             </div>
             <div className="space-y-2">

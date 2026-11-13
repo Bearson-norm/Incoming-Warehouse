@@ -89,9 +89,9 @@ function parsePackagingMetadata(metadata?: string | null): PackagingMeta {
   }
 }
 
-function formatTareKg(value: number | null | undefined): string {
+function formatTareG(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
-  return `${value} kg`;
+  return `${value} g`;
 }
 
 function matchesQuery(text: string, query: string): boolean {
@@ -266,7 +266,7 @@ export function CloudMasterDataManager() {
         const haystack = [
           vendor,
           p.name,
-          formatTareKg(p.tareWeight),
+          formatTareG(p.tareWeight),
           meta.grossWeightGr != null ? String(meta.grossWeightGr) : "",
           meta.source || "",
         ].join(" ");
@@ -440,7 +440,7 @@ export function CloudMasterDataManager() {
                         </TableCell>
                         <TableCell className="text-sm">{packaging.name}</TableCell>
                         <TableCell className="text-sm text-right font-mono tabular-nums">
-                          {formatTareKg(packaging.tareWeight)}
+                          {formatTareG(packaging.tareWeight)}
                         </TableCell>
                         <TableCell className="text-sm text-right font-mono tabular-nums">
                           {meta.grossWeightGr != null ? meta.grossWeightGr : "—"}
@@ -461,7 +461,7 @@ export function CloudMasterDataManager() {
         <section>
           <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
             <h3 className="font-semibold">
-              Daftar nama SKU{" "}
+              Daftar nama RM{" "}
               <span className="text-xs font-normal text-[#8d6e63]">
                 ({filteredRmCodes.length}/{activeRmCodes.length})
               </span>
@@ -481,7 +481,7 @@ export function CloudMasterDataManager() {
               <TableHeader className="sticky top-0 bg-[#fff8f0] z-10">
                 <TableRow>
                   <TableHead className="w-[100px]">Kode</TableHead>
-                  <TableHead>Nama SKU</TableHead>
+                  <TableHead>Nama RM</TableHead>
                   <TableHead className="w-[90px]">Area</TableHead>
                   <TableHead />
                 </TableRow>
@@ -490,7 +490,7 @@ export function CloudMasterDataManager() {
                 {filteredRmCodes.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-sm text-[#8d6e63] py-6">
-                      Tidak ada nama SKU yang cocok.
+                      Tidak ada nama RM yang cocok.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -542,7 +542,7 @@ export function CloudMasterDataManager() {
               </div>
             )}
             <div>
-              <Label>{entityType === "rmCode" ? "Nama SKU" : "Nama"}</Label>
+              <Label>{entityType === "rmCode" ? "Nama RM" : "Nama"}</Label>
               <Input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -550,10 +550,10 @@ export function CloudMasterDataManager() {
             </div>
             {entityType === "packaging" && (
               <div>
-                <Label>Tare (kg)</Label>
+                <Label>Tare (g)</Label>
                 <Input
                   type="number"
-                  step="0.001"
+                  step="0.1"
                   value={tareWeight}
                   onChange={(event) => setTareWeight(event.target.value)}
                 />

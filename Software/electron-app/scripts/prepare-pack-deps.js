@@ -23,13 +23,23 @@ function run(command, cwd) {
   });
 }
 
+function resolveApiMainFile() {
+  const candidates = [
+    path.join(apiPath, 'dist', 'src', 'main.js'),
+    path.join(apiPath, 'dist', 'main.js'),
+  ];
+  return candidates.find((p) => fs.existsSync(p));
+}
+
 function assertPackagingReady() {
   const apiPrisma = path.join(apiPath, 'node_modules', '@prisma', 'client');
   const gatewayMain = path.join(gatewayPath, 'dist', 'index.js');
-  const apiMain = path.join(apiPath, 'dist', 'src', 'main.js');
+  const apiMain = resolveApiMainFile();
 
-  if (!fs.existsSync(apiMain)) {
-    throw new Error(`API not built: missing ${apiMain}. Run npm run build:api first.`);
+  if (!apiMain) {
+    throw new Error(
+      `API not built: missing dist/src/main.js or dist/main.js under ${apiPath}. Run npm run build:api first.`
+    );
   }
   if (!fs.existsSync(gatewayMain)) {
     throw new Error(`Gateway not built: missing ${gatewayMain}. Run npm run build:gateway first.`);

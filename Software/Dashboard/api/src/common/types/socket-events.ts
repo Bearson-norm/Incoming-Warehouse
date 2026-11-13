@@ -14,7 +14,7 @@ export interface WeightUpdatePayload {
   gatewayId: string;
   readingId: string;
   weight: number;
-  unit: string; // 'kg', 'g', etc.
+  unit: string; // grams; legacy 'kg' is converted before storage
   stable: boolean;
   grossOrNet?: 'gross' | 'net';
   rawLine: string;

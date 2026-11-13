@@ -42,4 +42,9 @@ export class UpdateReadingLabelDto {
   @IsString()
   @MaxLength(128)
   batch?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  poNumber?: string;
 }

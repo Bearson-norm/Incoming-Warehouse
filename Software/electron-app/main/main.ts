@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { ConfigManager } from './config-manager';
 import { GatewayDeviceConfig, ProcessManager } from './process-manager';
+import { listPrinters, printHtmlQueued, LabelPrintRequest } from './label-printer';
 
 let mainWindow: BrowserWindow | null = null;
 let configManager: ConfigManager;
@@ -384,6 +385,31 @@ function setupIpcHandlers() {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  ipcMain.handle('printer:list', async (event: IpcMainInvokeEvent) => {
+    try {
+      const printers = await listPrinters(event.sender);
+      return { success: true, printers };
+    } catch (error) {
+      return {
+        success: false,
+        printers: [],
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  ipcMain.handle('printer:print-html', async (event: IpcMainInvokeEvent, payload: LabelPrintRequest) => {
+    try {
+      return await printHtmlQueued(event.sender, payload || { html: '', deviceName: '' });
+    } catch (error) {
+      return {
+        ok: false,
+        reason: 'spooler',
+        detail: error instanceof Error ? error.message : String(error),
       };
     }
   });

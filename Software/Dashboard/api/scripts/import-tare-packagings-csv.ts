@@ -40,7 +40,8 @@ async function main() {
         );
       }
 
-      const tareKg = row.tareWeightGr / 1000;
+      const tareWeight =
+        row.tareWeightGr == null ? null : row.tareWeightGr;
       const metadata = JSON.stringify({
         grossWeightGr: row.grossWeightGr,
         tareWeightGr: row.tareWeightGr,
@@ -58,7 +59,7 @@ async function main() {
       if (existing) {
         await prisma.packaging.update({
           where: { id: existing.id },
-          data: { tareWeight: tareKg, metadata },
+          data: { tareWeight, metadata },
         });
         packagingUpdated++;
       } else {
@@ -66,7 +67,7 @@ async function main() {
           data: {
             vendorId: vendor.id,
             name: row.packagingName,
-            tareWeight: tareKg,
+            tareWeight,
             metadata,
           },
         });

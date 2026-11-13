@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString, IsNumber } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsString, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryCloudReadingsDto {
@@ -18,6 +18,14 @@ export class QueryCloudReadingsDto {
   @IsOptional()
   @IsString()
   packageUid?: string;
+
+  @IsOptional()
+  @IsString()
+  poNumber?: string;
+
+  @IsOptional()
+  @IsIn(['po'])
+  groupBy?: 'po';
 
   @IsOptional()
   @IsString()

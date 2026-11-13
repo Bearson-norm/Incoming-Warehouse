@@ -6,16 +6,27 @@ import {
   MaxLength,
   Matches,
   IsNumber,
+  IsInt,
+  Min,
+  Max,
   IsIn,
   ValidateIf,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
+import { BadRequestException } from '@nestjs/common';
+import { parsePackageUidInput } from '../../lpn/parse-package-uid';
 
 export class CreateSessionDto {
   @IsOptional()
-  @Transform(({ value }) =>
-    typeof value === 'string' && value.trim() === '' ? undefined : value,
-  )
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    const parsed = parsePackageUidInput(value);
+    if (parsed.kind === 'empty') return undefined;
+    if (parsed.kind === 'reject') {
+      throw new BadRequestException(parsed.message);
+    }
+    return parsed.uid;
+  })
   @ValidateIf((_, v) => v != null && v !== '')
   @IsString()
   @MaxLength(64)
@@ -64,4 +75,12 @@ export class CreateSessionDto {
   @IsString()
   @MaxLength(100)
   scaleName: string;
+
+  /** Internal incoming only. Omit for a single LPN. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(30)
+  batchQuantity?: number;
 }

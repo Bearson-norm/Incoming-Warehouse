@@ -354,7 +354,22 @@ if ($exitCode -eq 0) {
         Write-Host "Installer: $($installer.FullName)" -ForegroundColor Cyan
     }
     if (Test-Path $unpackedPath) {
-        Write-Host "Unpacked app: $((Resolve-Path $unpackedPath).Path)" -ForegroundColor Cyan
+        $resolvedUnpacked = (Resolve-Path $unpackedPath).Path
+        Write-Host "Unpacked app: $resolvedUnpacked" -ForegroundColor Cyan
+        Write-Host "  -> Jalankan exe dari folder INI (bukan salinan lama di USB/Desktop)." -ForegroundColor Gray
+        $webIndex = Join-Path $unpackedPath 'resources\web\index.html'
+        if (Test-Path $webIndex) {
+            $webItem = Get-Item -LiteralPath $webIndex
+            Write-Host "  Web UI: $($webItem.FullName) (modified $($webItem.LastWriteTime))" -ForegroundColor Gray
+            if ($webItem.LastWriteTime -le $packStartTime) {
+                Write-Host '[WARN] index.html tidak diperbarui pada run ini. Tutup Incoming Warehouse, hapus folder release\win-unpacked, lalu package lagi.' -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host '[WARN] resources\web\index.html tidak ada - package tidak lengkap.' -ForegroundColor Yellow
+        }
+    }
+    if (-not $unpackedFresh -and (Test-Path $unpackedPath)) {
+        Write-Host '[WARN] win-unpacked mungkin masih build lama. Lihat pesan di atas atau hapus Software\release dan ulangi package.' -ForegroundColor Yellow
     }
 } else {
     Write-Host "`n[FAIL] Package failed with exit code: $exitCode" -ForegroundColor Red

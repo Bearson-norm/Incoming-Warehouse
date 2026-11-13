@@ -387,7 +387,7 @@ async function seedDefaultData(prisma: PrismaClient): Promise<void> {
     data: {
       vendorId: vendor.id,
       name: 'Box Small',
-      tareWeight: 0.5,
+      tareWeight: 500,
       metadata: JSON.stringify({ size: 'small', type: 'box' }),
     },
   });

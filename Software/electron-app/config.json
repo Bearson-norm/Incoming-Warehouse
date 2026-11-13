@@ -4,8 +4,8 @@
     "autoStart": false
   },
   "odoo": {
-    "baseUrl": "",
-    "iotApiKey": ""
+    "baseUrl": "https://foomx.odoo.com",
+    "iotApiKey": "iot-foom-key"
   },
   "cloud": {
     "serverUrl": "https://wis.moof-set.web.id",

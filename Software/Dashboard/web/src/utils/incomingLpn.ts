@@ -5,17 +5,6 @@
 
 export const INCOMING_LPN_MAX_LENGTH = 64;
 
-export function previewIncomingUniqueSegment(): string {
-  const bytes = new Uint8Array(2);
-  crypto.getRandomValues(bytes);
-  const short = Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-    .toUpperCase();
-  const year = new Date().getFullYear();
-  return `${short}${year}`;
-}
-
 export function normalizeIncomingReference(raw: string): string {
   return raw.trim().toUpperCase();
 }
@@ -28,27 +17,51 @@ export function normalizeIncomingRmCode(raw: string): string {
   return raw.trim().toUpperCase();
 }
 
+export function incomingLpnSequenceSuffixLength(n: number): number {
+  if (!Number.isInteger(n) || n < 1) return 0;
+  return 1 + String(n).length;
+}
+
+export function appendIncomingLpnSequence(
+  baseLpn: string,
+  n: number,
+): string | null {
+  const base = baseLpn.trim().toUpperCase();
+  if (!base || !Number.isInteger(n) || n < 1) return null;
+  const lpn = `${base}-${n}`;
+  if (lpn.length > INCOMING_LPN_MAX_LENGTH) return null;
+  return lpn;
+}
+
 export function composeIncomingLpnPreview(parts: {
-  uniqueSegment: string;
   reference: string;
   rmCode: string;
   batch: string;
+  reservedSuffixLength?: number;
 }): string | null {
   const reference = normalizeIncomingReference(parts.reference);
   const batch = normalizeIncomingBatch(parts.batch);
   const rmCode = normalizeIncomingRmCode(parts.rmCode);
-  const uniqueSegment = parts.uniqueSegment.trim().toUpperCase();
-  if (!uniqueSegment || !reference || !batch || !rmCode) {
+  if (!reference || !batch || !rmCode) {
     return null;
   }
-  let lpn = `${uniqueSegment}-${reference}-${rmCode}-${batch}`;
-  if (lpn.length > INCOMING_LPN_MAX_LENGTH) {
-    const fixedLen = uniqueSegment.length + rmCode.length + 3;
-    let budget = INCOMING_LPN_MAX_LENGTH - fixedLen;
+  const reserved = Math.max(0, parts.reservedSuffixLength ?? 0);
+  const maxLen = INCOMING_LPN_MAX_LENGTH - reserved;
+  if (maxLen < 5) return null;
+
+  let ref = reference;
+  let bat = batch;
+  let lpn = `${ref}-${rmCode}-${bat}`;
+  if (lpn.length > maxLen) {
+    const fixedLen = rmCode.length + 2;
+    let budget = maxLen - fixedLen;
     if (budget < 2) return null;
-    const refLen = Math.max(1, Math.min(reference.length, Math.floor(budget / 2)));
+    const refLen = Math.max(1, Math.min(ref.length, Math.floor(budget / 2)));
     const batchLen = Math.max(1, budget - refLen - 1);
-    lpn = `${uniqueSegment}-${reference.slice(0, refLen)}-${rmCode}-${batch.slice(0, batchLen)}`;
+    ref = ref.slice(0, refLen);
+    bat = bat.slice(0, batchLen);
+    lpn = `${ref}-${rmCode}-${bat}`;
   }
+  if (lpn.length > maxLen) return null;
   return lpn.toUpperCase();
 }

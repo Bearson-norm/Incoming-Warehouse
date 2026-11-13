@@ -89,6 +89,13 @@ async function buildAll() {
     process.exit(1);
   }
 
+  // Postgres Prisma client for nest build (scripts/ are excluded via tsconfig.build.json)
+  console.log('\n📦 Step 1.5/5: Generating Prisma client (PostgreSQL) for API tooling...');
+  if (!runCommand('npm run prisma:generate', apiPath)) {
+    console.error('✗ Prisma PostgreSQL client generation failed');
+    process.exit(1);
+  }
+
   // 2. Build Dashboard API
   console.log('\n📦 Step 2/5: Building Dashboard API...');
   if (!runCommand('npm run build', apiPath)) {
@@ -96,8 +103,8 @@ async function buildAll() {
     process.exit(1);
   }
 
-  // Generate Prisma client
-  console.log('\n📦 Step 2.5/5: Generating Prisma client...');
+  // SQLite Prisma client for packaged Electron API
+  console.log('\n📦 Step 2.5/5: Generating Prisma client (SQLite) for Electron...');
   // Clear Prisma cache first to avoid EPERM errors on Windows
   const prismaCachePaths = [
     path.join(rootPath, 'Dashboard/api/node_modules/.prisma'),

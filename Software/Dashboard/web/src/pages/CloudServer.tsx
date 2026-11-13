@@ -30,17 +30,37 @@ import {
   Wifi,
   WifiOff,
   RotateCcw,
+  ChevronDown,
 } from "lucide-react";
 import { CloudScale, CloudStatus, CloudWeighReading } from "../types/weighing";
 import { CloudLpnTrace } from "../components/cloud/CloudLpnTrace";
 import { CloudMasterDataManager } from "../components/cloud/CloudMasterDataManager";
 import { SearchableSelect } from "../components/SearchableSelect";
 
+interface CloudReadingGroup {
+  poNumber: string;
+  latestIncomingAt: string;
+  count: number;
+  items: CloudWeighReading[];
+}
+
 interface CloudReadingsResponse {
   items: CloudWeighReading[];
+  groups?: CloudReadingGroup[];
   total: number;
   limit: number;
   offset: number;
+  capped?: boolean;
+}
+
+function dayStartIso(value: string): string {
+  return new Date(value).toISOString();
+}
+
+function dayEndExclusiveIso(value: string): string {
+  const end = new Date(value);
+  end.setDate(end.getDate() + 1);
+  return end.toISOString();
 }
 
 const PAGE_SIZE = 25;
@@ -52,13 +72,21 @@ export default function CloudServer() {
 
   const [status, setStatus] = useState<CloudStatus | null>(null);
   const [scales, setScales] = useState<CloudScale[]>([]);
-  const [readings, setReadings] = useState<CloudWeighReading[]>([]);
+  const [groups, setGroups] = useState<CloudReadingGroup[]>([]);
   const [total, setTotal] = useState(0);
+  const [capped, setCapped] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [filterScaleId, setFilterScaleId] = useState("");
   const [filterUsername, setFilterUsername] = useState("");
+  const [filterPo, setFilterPo] = useState("");
+  const [appliedPo, setAppliedPo] = useState("");
+  const [filterLpn, setFilterLpn] = useState("");
+  const [appliedLpn, setAppliedLpn] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [newScaleName, setNewScaleName] = useState("");
 
   const loadAll = useCallback(async () => {
@@ -71,16 +99,22 @@ export default function CloudServer() {
         }),
         api.get<CloudReadingsResponse>("/cloud/readings", {
           params: {
+            groupBy: "po",
             limit: PAGE_SIZE,
             offset: (page - 1) * PAGE_SIZE,
             ...(filterScaleId ? { scaleId: Number(filterScaleId) } : {}),
             ...(filterUsername ? { username: filterUsername } : {}),
+            ...(appliedPo.trim() ? { poNumber: appliedPo.trim() } : {}),
+            ...(appliedLpn.trim() ? { packageUid: appliedLpn.trim() } : {}),
+            ...(fromDate ? { from: dayStartIso(fromDate) } : {}),
+            ...(toDate ? { to: dayEndExclusiveIso(toDate) } : {}),
           },
         }),
       ]);
       setStatus(statusRes.data);
       setScales(scalesRes.data);
-      setReadings(readingsRes.data.items);
+      setGroups(readingsRes.data.groups || []);
+      setCapped(Boolean(readingsRes.data.capped));
       setTotal(readingsRes.data.total);
     } catch (error: unknown) {
       const message =
@@ -90,7 +124,7 @@ export default function CloudServer() {
     } finally {
       setLoading(false);
     }
-  }, [filterScaleId, filterUsername, isAdmin, page]);
+  }, [appliedLpn, appliedPo, filterScaleId, filterUsername, fromDate, isAdmin, page, toDate]);
 
   useEffect(() => {
     void loadAll();
@@ -257,10 +291,59 @@ export default function CloudServer() {
                 />
               </div>
             )}
+            <div className="space-y-1 min-w-[140px]">
+              <Label className="text-xs">{t("poNumber")}</Label>
+              <Input
+                value={filterPo}
+                onChange={(e) => setFilterPo(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setFilter(setAppliedPo, filterPo);
+                }}
+                className="h-9 font-mono"
+                placeholder={t("poNumber")}
+              />
+            </div>
+            <div className="space-y-1 min-w-[140px]">
+              <Label className="text-xs">{t("lpn")}</Label>
+              <Input
+                value={filterLpn}
+                onChange={(e) => setFilterLpn(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setFilter(setAppliedLpn, filterLpn);
+                }}
+                className="h-9 font-mono"
+                placeholder={t("lpn")}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("dateFrom")}</Label>
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFilter(setFromDate, e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("dateTo")}</Label>
+              <Input
+                type="date"
+                value={toDate}
+                onChange={(e) => setFilter(setToDate, e.target.value)}
+                className="h-9"
+              />
+            </div>
             <Button
               variant="outline"
               className="h-9"
-              onClick={() => void loadAll()}
+              onClick={() => {
+                const unchanged =
+                  filterPo === appliedPo && filterLpn === appliedLpn && page === 1;
+                setAppliedPo(filterPo);
+                setAppliedLpn(filterLpn);
+                setPage(1);
+                if (unchanged) void loadAll();
+              }}
               disabled={loading}
             >
               <RefreshCw
@@ -348,56 +431,86 @@ export default function CloudServer() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("date")}</TableHead>
-                  <TableHead>{t("scale")}</TableHead>
-                  <TableHead>{t("username")}</TableHead>
-                  <TableHead>{t("lpn")}</TableHead>
-                  <TableHead>{t("flowType")}</TableHead>
-                  <TableHead>{t("gross")}</TableHead>
-                  <TableHead>{t("net")}</TableHead>
-                  <TableHead>{t("status")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {readings.map((reading) => (
-                  <TableRow key={reading.id}>
-                    <TableCell className="text-xs whitespace-nowrap">
-                      {formatDate(reading.capturedAt)}
-                    </TableCell>
-                    <TableCell>{reading.scaleName}</TableCell>
-                    <TableCell>{reading.username}</TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {reading.packageUid || "—"}
-                    </TableCell>
-                    <TableCell className="capitalize">
-                      {reading.flowType}
-                    </TableCell>
-                    <TableCell>
-                      {reading.grossWeight ?? reading.weight} {reading.unit}
-                    </TableCell>
-                    <TableCell>{reading.netWeight ?? "—"}</TableCell>
-                    <TableCell className="capitalize">
-                      {reading.weightStatus || "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!loading && readings.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center text-[#8d6e63] py-8"
+          {capped && (
+            <p className="mb-3 text-xs text-[#8d6e63]">{t("readingsCapped")}</p>
+          )}
+          {groups.length === 0 && !loading ? (
+            <p className="py-8 text-center text-[#8d6e63]">{t("noCloudReadings")}</p>
+          ) : (
+            <div className="space-y-4">
+              {groups.map((group) => {
+                const groupKey = group.poNumber || "__none__";
+                const open = !collapsed[groupKey];
+                return (
+                  <div key={groupKey} className="rounded-lg border border-[#d7ccc8] bg-white">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                      onClick={() =>
+                        setCollapsed((current) => ({
+                          ...current,
+                          [groupKey]: !current[groupKey],
+                        }))
+                      }
                     >
-                      {t("noCloudReadings")}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                      <ChevronDown className={`h-4 w-4 text-[#6d4c41] ${open ? "" : "-rotate-90"}`} />
+                      <span className="font-semibold text-[#3e2723]">
+                        {group.poNumber || t("noPoGroup")}
+                      </span>
+                      <span className="rounded-full bg-[#f5ebe0] px-2 py-0.5 text-xs text-[#6d4c41]">
+                        {t("poGroupCount").split("{count}").join(String(group.count))}
+                      </span>
+                      <span className="ml-auto text-xs text-[#8d6e63]">
+                        {t("poGroupLatest")}: {formatDate(group.latestIncomingAt)}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="overflow-x-auto px-2 pb-3">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>{t("date")}</TableHead>
+                              <TableHead>{t("scale")}</TableHead>
+                              <TableHead>{t("username")}</TableHead>
+                              <TableHead>{t("lpn")}</TableHead>
+                              <TableHead>{t("flowType")}</TableHead>
+                              <TableHead>{t("gross")}</TableHead>
+                              <TableHead>{t("net")}</TableHead>
+                              <TableHead>{t("status")}</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.items.map((reading) => (
+                              <TableRow key={reading.id}>
+                                <TableCell className="whitespace-nowrap text-xs">
+                                  {formatDate(reading.capturedAt)}
+                                </TableCell>
+                                <TableCell>{reading.scaleName}</TableCell>
+                                <TableCell>{reading.username}</TableCell>
+                                <TableCell className="font-mono text-xs">
+                                  {reading.packageUid || "—"}
+                                </TableCell>
+                                <TableCell className="capitalize">
+                                  {reading.flowType}
+                                </TableCell>
+                                <TableCell>
+                                  {reading.grossWeight ?? reading.weight} {reading.unit}
+                                </TableCell>
+                                <TableCell>{reading.netWeight ?? "—"}</TableCell>
+                                <TableCell className="capitalize">
+                                  {reading.weightStatus || "—"}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#eaded3] pt-4 text-sm">
             <span className="text-[#8d6e63]">Halaman {page} dari {totalPages}</span>
             <div className="flex gap-2">

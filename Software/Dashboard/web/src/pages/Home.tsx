@@ -68,7 +68,7 @@ export default function Home() {
 
   const vendorChartData = Object.entries(stats.byLabel).map(([name, data]) => ({
     name,
-    weight: parseFloat((data.weight * 1000).toFixed(2)),
+    weight: parseFloat(data.weight.toFixed(1)),
     count: data.count,
   }));
 
@@ -143,7 +143,7 @@ export default function Home() {
               {loading ? (
                 <span className="inline-block w-6 h-6 border-2 border-[#8d6e63] border-t-transparent rounded-full animate-spin" />
               ) : (
-                `${(stats.totalNetWeight * 1000).toFixed(2)} g`
+                `${stats.totalNetWeight.toFixed(1)} g`
               )}
             </div>
             <p className="text-xs text-[#8d6e63] leading-relaxed break-words">{t('net').toLowerCase()}</p>

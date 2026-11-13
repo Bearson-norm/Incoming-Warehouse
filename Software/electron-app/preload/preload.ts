@@ -55,6 +55,17 @@ contextBridge.exposeInMainWorld('electron', {
     restartApi: () => ipcRenderer.invoke('process:restart-api'),
   },
 
+  printer: {
+    list: () => ipcRenderer.invoke('printer:list'),
+    printHtml: (payload: {
+      html: string;
+      deviceName: string;
+      paperWidthMm?: number;
+      paperHeightMm?: number;
+      landscape?: boolean;
+    }) => ipcRenderer.invoke('printer:print-html', payload),
+  },
+
   isElectron: true,
 });
 
@@ -110,6 +121,27 @@ declare global {
         startGateway: () => Promise<{ success: boolean; error?: string }>;
         stopGateway: () => Promise<{ success: boolean; error?: string }>;
         restartApi: () => Promise<{ success: boolean; error?: string }>;
+      };
+      printer: {
+        list: () => Promise<{
+          success: boolean;
+          printers?: Array<{
+            name: string;
+            displayName: string;
+            isDefault: boolean;
+            status: number;
+            blocked: boolean;
+            reason: string | null;
+          }>;
+          error?: string;
+        }>;
+        printHtml: (payload: {
+          html: string;
+          deviceName: string;
+          paperWidthMm?: number;
+          paperHeightMm?: number;
+          landscape?: boolean;
+        }) => Promise<{ ok: boolean; reason?: string; detail?: string }>;
       };
       isElectron: boolean;
     };

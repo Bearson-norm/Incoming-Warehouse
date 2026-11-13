@@ -6,10 +6,17 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { toGrams } from '../common/weight-unit';
 import { QueryReadingsDto } from './dto/query-readings.dto';
 import { CreateReadingDto } from './dto/create-reading.dto';
 import { UpdateReadingLabelDto } from './dto/update-reading-label.dto';
 import { CloudSyncService } from '../cloud/cloud-sync.service';
+import { SessionsService } from '../sessions/sessions.service';
+import {
+  groupReadingsByPo,
+  poNumberFromLabelMetadata,
+  PO_GROUP_FETCH_CAP,
+} from '../common/po-groups';
 
 type Requester = { userId: number; role: string };
 
@@ -30,6 +37,7 @@ export class ReadingsService {
   constructor(
     private prisma: PrismaService,
     private cloudSync: CloudSyncService,
+    private sessionsService: SessionsService,
   ) {}
 
   private caseInsensitiveFilter(
@@ -96,8 +104,20 @@ export class ReadingsService {
     if (gatewayId) {
       sessionFilter.gatewayId = gatewayId;
     }
-    if (flowType === 'incoming' || flowType === 'intrans') {
-      sessionFilter.flowType = flowType;
+    if (flowType === 'intrans') {
+      sessionFilter.flowType = 'intrans';
+    } else if (flowType === 'incoming') {
+      sessionFilter.flowType = 'incoming';
+    } else if (flowType === 'qc_sample' || flowType === 'production') {
+      sessionFilter.flowType = 'incoming';
+      sessionFilter.weighingMethod = 'odoo';
+      and.push({
+        session: {
+          labelMetadata: {
+            contains: `"odooWeighingType":"${flowType}"`,
+          },
+        },
+      });
     }
     if (weighingMethod === 'odoo' || weighingMethod === 'internal') {
       sessionFilter.weighingMethod = weighingMethod;
@@ -130,6 +150,18 @@ export class ReadingsService {
       });
     }
 
+    if (query.poNumber?.trim()) {
+      and.push({
+        session: {
+          labelMetadata: { contains: query.poNumber.trim() },
+        },
+      });
+    }
+
+    if (query.stable === true) {
+      where.stable = true;
+    }
+
     if (and.length > 0) {
       where.AND = and;
     }
@@ -138,6 +170,9 @@ export class ReadingsService {
   }
 
   async findAll(query: QueryReadingsDto, requester: Requester) {
+    if (query.groupBy === 'po') {
+      return this.findGrouped(query, requester);
+    }
     const page = query.page && query.page > 0 ? query.page : 1;
     const limit =
       query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
@@ -166,6 +201,45 @@ export class ReadingsService {
         page,
         limit,
         totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  private async findGrouped(query: QueryReadingsDto, requester: Requester) {
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const limit =
+      query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 20;
+    const where = this.buildWhere(query, requester);
+    const [readings, matched] = await Promise.all([
+      this.prisma.weighReading.findMany({
+        where,
+        include: {
+          session: { include: sessionInclude },
+        },
+        orderBy: { capturedAt: 'desc' },
+        take: PO_GROUP_FETCH_CAP,
+      }),
+      this.prisma.weighReading.count({ where }),
+    ]);
+
+    const poTerm = query.poNumber?.trim().toLowerCase() ?? '';
+    const filtered = poTerm
+      ? readings.filter((reading) =>
+          poNumberFromLabelMetadata(reading.session.labelMetadata)
+            .toLowerCase()
+            .includes(poTerm),
+        )
+      : readings;
+    const allGroups = groupReadingsByPo(filtered, (reading) => reading.session.labelMetadata);
+    const start = (page - 1) * limit;
+    return {
+      groups: allGroups.slice(start, start + limit),
+      meta: {
+        total: allGroups.length,
+        page,
+        limit,
+        totalPages: Math.ceil(allGroups.length / limit) || 1,
+        capped: matched > PO_GROUP_FETCH_CAP,
       },
     };
   }
@@ -362,9 +436,69 @@ export class ReadingsService {
     if (dto.skuName !== undefined) {
       nextMetadata.skuName = dto.skuName.trim();
     }
-    if (nextLpn) {
-      nextMetadata.packageUid = nextLpn;
-      nextMetadata.labelProductNumber = nextLpn;
+    if (dto.poNumber !== undefined) {
+      nextMetadata.poNumber = dto.poNumber.trim();
+    }
+
+    const session = reading.session;
+    let resolvedLpn =
+      nextLpn ||
+      reading.packageUid?.trim().toUpperCase() ||
+      session.packageUid?.trim().toUpperCase() ||
+      '';
+
+    const missingLpn = !resolvedLpn;
+    if (
+      missingLpn &&
+      session.flowType === 'incoming' &&
+      session.weighingMethod === 'internal'
+    ) {
+      const reference = String(nextMetadata.referenceOdoo ?? '').trim();
+      const batch = String(nextMetadata.batch ?? '').trim();
+      const poNumber = String(
+        nextMetadata.poNumber ?? nextMetadata.poAdj ?? '',
+      ).trim();
+      const arrivalAt = String(nextMetadata.arrivalAt ?? '').trim();
+      const expiredDate = String(nextMetadata.expiredDate ?? '').trim();
+      const rmCode = session.rmCode?.code?.trim();
+      if (!reference) {
+        throw new BadRequestException(
+          'Reference Odoo is required to generate LPN',
+        );
+      }
+      if (!poNumber) {
+        throw new BadRequestException('PO number is required to generate LPN');
+      }
+      if (!batch) {
+        throw new BadRequestException('Batch is required to generate LPN');
+      }
+      if (!arrivalAt || Number.isNaN(new Date(arrivalAt).getTime())) {
+        throw new BadRequestException(
+          'Valid arrival date is required to generate LPN',
+        );
+      }
+      if (!expiredDate || Number.isNaN(new Date(expiredDate).getTime())) {
+        throw new BadRequestException(
+          'Valid expired date is required to generate LPN',
+        );
+      }
+      if (!rmCode) {
+        throw new BadRequestException(
+          'Session has no RM code; LPN cannot be generated',
+        );
+      }
+      const generated = await this.sessionsService.allocateInternalIncomingLpn(
+        reference,
+        batch,
+        rmCode,
+      );
+      resolvedLpn = generated.lpn;
+      delete nextMetadata.lpnUniqueSegment;
+      nextMetadata.labelProductNumber = generated.lpn;
+      nextMetadata.packageUid = generated.lpn;
+    } else if (resolvedLpn) {
+      nextMetadata.packageUid = resolvedLpn;
+      nextMetadata.labelProductNumber = resolvedLpn;
     }
 
     try {
@@ -372,13 +506,13 @@ export class ReadingsService {
         this.prisma.weighReading.update({
           where: { id },
           data: {
-            ...(nextLpn ? { packageUid: nextLpn } : {}),
+            ...(resolvedLpn ? { packageUid: resolvedLpn } : {}),
           },
         }),
         this.prisma.weighSession.update({
           where: { id: reading.sessionId },
           data: {
-            ...(nextLpn ? { packageUid: nextLpn } : {}),
+            ...(resolvedLpn ? { packageUid: resolvedLpn } : {}),
             labelMetadata: JSON.stringify(nextMetadata),
           },
         }),
@@ -432,11 +566,16 @@ export class ReadingsService {
       throw new NotFoundException('Session has already ended');
     }
 
+    const storedWeight = toGrams(
+      createReadingDto.weight,
+      createReadingDto.unit || 'g',
+    );
+
     return this.prisma.weighReading.create({
       data: {
         sessionId: createReadingDto.sessionId,
-        weight: createReadingDto.weight,
-        unit: createReadingDto.unit || 'kg',
+        weight: storedWeight,
+        unit: 'g',
         stable: createReadingDto.stable ?? true,
         rawLine: createReadingDto.rawLine,
         capturedAt: createReadingDto.capturedAt

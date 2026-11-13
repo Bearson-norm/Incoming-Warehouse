@@ -84,13 +84,12 @@ function migratePrintLabelConfig(
   return next;
 }
 
-/** Nilai `size` untuk aturan CSS @page. */
+/**
+ * Ukuran halaman CSS, sudah dalam orientasi cetak.
+ * Jangan menambah kata landscape: Electron memutar lagi jika opsi itu aktif,
+ * dan dua putaran itu menggeser logo sampai terpotong.
+ */
 export function formatPrintPageSize(cfg: PrintLabelConfig): string {
-  if (cfg.paperLandscape) {
-    const w = cfg.paperMediaWidth;
-    const h = cfg.paperMediaHeight;
-    return `${w}mm ${h}mm landscape`;
-  }
   if (cfg.paperHeight > 0) {
     return `${cfg.paperWidth}mm ${cfg.paperHeight}mm`;
   }

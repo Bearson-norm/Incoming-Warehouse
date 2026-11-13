@@ -14,6 +14,18 @@ import {
   WeightSnapshotStore,
 } from '../websocket/weight-snapshot.store';
 import { CloudSyncService } from '../cloud/cloud-sync.service';
+import {
+  IncomingOdooMeta,
+  readIncomingOdooMeta,
+} from '../odoo/incoming-odoo-process';
+import { OdooWeightSuccess } from '../odoo/odoo-weighing.service';
+import {
+  BatchAdvance,
+  QUEUE_DONE,
+  QUEUE_PENDING,
+  SessionsService,
+} from '../sessions/sessions.service';
+import { roundGrams } from '../common/weight-unit';
 
 type SessionWithPackaging = WeighSession & {
   packaging: { id: number; tareWeight: number | null } | null;
@@ -28,6 +40,7 @@ export class WeighingsService {
     private odooWeighing: OdooWeighingService,
     private snapshots: WeightSnapshotStore,
     private cloudSync: CloudSyncService,
+    private sessions: SessionsService,
   ) {}
 
   async confirm(userId: number, dto: ConfirmWeighingDto) {
@@ -53,7 +66,8 @@ export class WeighingsService {
     });
 
     if (existing) {
-      return this.toConfirmResult(session, existing);
+      const advance = await this.advanceForSession(session);
+      return this.toConfirmResult(session, existing, advance);
     }
 
     if (session.endedAt) {
@@ -110,29 +124,28 @@ export class WeighingsService {
       reading.session.packageUid ||
       ''
     ).trim();
-    if (!packageUid) {
-      throw new BadRequestException('LPN is required before sending to Odoo');
-    }
-
-    const unit = reading.unit || 'kg';
+    const unit = reading.unit || 'g';
     const grossSource = reading.grossWeight ?? reading.weight;
-    const grossWeightKg = this.odooWeighing.toGrossWeightKg(grossSource, unit);
-    const odooResult = await this.odooWeighing.submitWeight(
+    const grossWeightG = this.odooWeighing.toGrossWeightG(grossSource, unit);
+    const submitted = await this.submitOdooWeight(
+      reading.session,
       packageUid,
-      grossWeightKg,
+      grossWeightG,
     );
 
     const updated = await this.prisma.weighReading.update({
       where: { id: reading.id },
       data: {
-        packageUid,
-        odooLogId: odooResult.log_id,
-        odooPackageId: odooResult.package_id,
-        grossWeight: odooResult.gross_weight,
-        tareWeight: odooResult.tare_weight,
-        netWeight: odooResult.net_weight,
-        weightStatus: odooResult.weight_status,
-        odooMessage: odooResult.message,
+        weight: grossWeightG,
+        unit: 'g',
+        packageUid: submitted.packageUid,
+        odooLogId: submitted.result.log_id ?? null,
+        odooPackageId: submitted.result.package_id ?? null,
+        grossWeight: submitted.result.gross_weight,
+        tareWeight: submitted.result.tare_weight,
+        netWeight: submitted.result.net_weight,
+        weightStatus: submitted.weightStatus,
+        odooMessage: submitted.result.message,
         odooError: null,
       },
     });
@@ -145,55 +158,53 @@ export class WeighingsService {
     session: SessionWithPackaging,
     snapshot: WeightSnapshot,
   ) {
-    const packageUid = session.packageUid?.trim();
-    if (!packageUid) {
-      throw new BadRequestException('Session has no LPN (packageUid)');
-    }
-
-    const unit = snapshot.unit || 'kg';
-    const grossWeightKg = this.odooWeighing.toGrossWeightKg(
+    const unit = snapshot.unit || 'g';
+    const grossWeightG = this.odooWeighing.toGrossWeightG(
       snapshot.weight,
       unit,
     );
-    const odooResult = await this.odooWeighing.submitWeight(
-      packageUid,
-      grossWeightKg,
+    const submitted = await this.submitOdooWeight(
+      session,
+      session.packageUid?.trim() || '',
+      grossWeightG,
     );
+    const odooResult = submitted.result;
 
     const readingData: Prisma.WeighReadingUncheckedCreateInput = {
       sessionId: session.id,
-      weight: snapshot.weight,
-      unit,
+      weight: grossWeightG,
+      unit: 'g',
       stable: true,
       rawLine: snapshot.rawLine ?? null,
       capturedAt: snapshot.capturedAt
         ? new Date(snapshot.capturedAt)
         : new Date(),
       savedAt: new Date(),
-      packageUid,
-      odooLogId: odooResult.log_id,
-      odooPackageId: odooResult.package_id,
+      packageUid: submitted.packageUid,
+      odooLogId: odooResult.log_id ?? null,
+      odooPackageId: odooResult.package_id ?? null,
       grossWeight: odooResult.gross_weight,
       tareWeight: odooResult.tare_weight,
       netWeight: odooResult.net_weight,
-      weightStatus: odooResult.weight_status,
+      weightStatus: submitted.weightStatus,
       odooMessage: odooResult.message,
     };
 
     let lastDbError: Error | null = null;
     for (let attempt = 1; attempt <= 5; attempt++) {
       try {
-        const reading = await this.persistReading(session.id, readingData);
-        if (reading) {
-          await this.triggerCloudSync(reading, session, session.userId);
-          return this.toConfirmResult(session, reading);
+        const saved = await this.persistReading(session.id, readingData);
+        if (saved) {
+          await this.triggerCloudSync(saved.reading, session, session.userId);
+          return this.toConfirmResult(session, saved.reading, saved);
         }
         const winner = await this.prisma.weighReading.findFirst({
           where: { sessionId: session.id, savedAt: { not: null } },
           orderBy: { savedAt: 'desc' },
         });
         if (winner) {
-          return this.toConfirmResult(session, winner);
+          const advance = await this.advanceForSession(session);
+          return this.toConfirmResult(session, winner, advance);
         }
         throw new BadRequestException('Session has already ended');
       } catch (error) {
@@ -218,8 +229,8 @@ export class WeighingsService {
     snapshot: WeightSnapshot,
     fallbackFromOdoo = false,
   ) {
-    const unit = snapshot.unit || 'kg';
-    const grossWeightKg = this.odooWeighing.toGrossWeightKg(
+    const unit = snapshot.unit || 'g';
+    const grossWeightG = this.odooWeighing.toGrossWeightG(
       snapshot.weight,
       unit,
     );
@@ -238,14 +249,14 @@ export class WeighingsService {
         }
       } else {
         tareWeight = tare;
-        netWeight = Math.round((grossWeightKg - tare) * 1000) / 1000;
+        netWeight = roundGrams(grossWeightG - tare);
       }
     }
 
     const readingData: Prisma.WeighReadingUncheckedCreateInput = {
       sessionId: session.id,
-      weight: snapshot.weight,
-      unit,
+      weight: grossWeightG,
+      unit: 'g',
       stable: true,
       rawLine: snapshot.rawLine ?? null,
       capturedAt: snapshot.capturedAt
@@ -253,7 +264,7 @@ export class WeighingsService {
         : new Date(),
       savedAt: new Date(),
       packageUid,
-      grossWeight: grossWeightKg,
+      grossWeight: grossWeightG,
       tareWeight,
       netWeight,
       weightStatus: 'local',
@@ -262,20 +273,93 @@ export class WeighingsService {
         : 'Saved locally (internal)',
     };
 
-    const reading = await this.persistReading(session.id, readingData);
-    if (!reading) {
+    const saved = await this.persistReading(session.id, readingData);
+    if (!saved) {
       const winner = await this.prisma.weighReading.findFirst({
         where: { sessionId: session.id, savedAt: { not: null } },
         orderBy: { savedAt: 'desc' },
       });
       if (winner) {
-        return this.toConfirmResult(session, winner);
+        const advance = await this.advanceForSession(session);
+        return this.toConfirmResult(session, winner, advance);
       }
       throw new BadRequestException('Session has already ended');
     }
 
-    await this.triggerCloudSync(reading, session, session.userId);
-    return this.toConfirmResult(session, reading);
+    await this.triggerCloudSync(saved.reading, session, session.userId);
+    return this.toConfirmResult(session, saved.reading, saved);
+  }
+
+  private async submitOdooWeight(
+    session: Pick<
+      WeighSession,
+      'flowType' | 'weighingMethod' | 'labelMetadata' | 'scaleName'
+    >,
+    packageUid: string,
+    grossWeightG: number,
+  ): Promise<{
+    result: OdooWeightSuccess;
+    packageUid: string | null;
+    weightStatus: string | null;
+  }> {
+    const uid = packageUid.trim();
+    const incomingOdoo =
+      session.flowType === 'incoming' && session.weighingMethod === 'odoo';
+    if (!incomingOdoo) {
+      if (!uid) {
+        throw new BadRequestException('LPN is required before sending to Odoo');
+      }
+      const result = await this.odooWeighing.submitWeight(uid, grossWeightG);
+      return {
+        result,
+        packageUid: uid,
+        weightStatus: result.weight_status ?? null,
+      };
+    }
+
+    const meta = readIncomingOdooMeta(session.labelMetadata);
+    this.assertIncomingOdooReady(meta, uid, grossWeightG);
+    const deviceUid = session.scaleName?.trim();
+    if (!deviceUid) {
+      throw new BadRequestException('device_uid is required');
+    }
+    const result = await this.odooWeighing.submitWeight(uid, grossWeightG, {
+      weighingType: meta.weighingType,
+      deviceUid,
+      qcRecord: meta.qcRecord,
+      tareWeightG: meta.sampleTareG,
+    });
+    return {
+      result,
+      packageUid: uid || null,
+      weightStatus:
+        result.weight_status ||
+        (meta.weighingType === 'inbound' ? null : 'pending'),
+    };
+  }
+
+  private assertIncomingOdooReady(
+    meta: IncomingOdooMeta,
+    packageUid: string,
+    grossWeightG: number,
+  ) {
+    if (meta.weighingType === 'qc_sample') {
+      if (!meta.qcRecord) {
+        throw new BadRequestException('qc_reference is required');
+      }
+      if (meta.sampleTareG == null || meta.sampleTareG < 0) {
+        throw new BadRequestException('tare_weight must be >= 0');
+      }
+      if (!(grossWeightG > meta.sampleTareG)) {
+        throw new BadRequestException(
+          'tare_weight must be less than gross_weight',
+        );
+      }
+      return;
+    }
+    if (!packageUid) {
+      throw new BadRequestException('Session has no LPN (packageUid)');
+    }
   }
 
   private async triggerCloudSync(
@@ -294,27 +378,51 @@ export class WeighingsService {
     );
   }
 
+  private async advanceForSession(session: {
+    id: number;
+    batchGroupId: string | null;
+  }): Promise<BatchAdvance> {
+    if (!session.batchGroupId) {
+      return { nextSession: null, batchQueue: [] };
+    }
+    return this.sessions.describeBatchQueue(session.batchGroupId, session.id);
+  }
+
   private async persistReading(
     sessionId: number,
     readingData: Prisma.WeighReadingUncheckedCreateInput,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      const current = await tx.weighSession.findUnique({
+        where: { id: sessionId },
+      });
+      if (!current || current.endedAt) return null;
+      if (current.queueStatus === QUEUE_PENDING) {
+        throw new BadRequestException('This batch item is still waiting');
+      }
+
       const ended = await tx.weighSession.updateMany({
         where: { id: sessionId, endedAt: null },
-        data: { endedAt: new Date() },
+        data: {
+          endedAt: new Date(),
+          ...(current.batchGroupId ? { queueStatus: QUEUE_DONE } : {}),
+        },
       });
 
       if (ended.count === 0) {
         return null;
       }
 
-      return tx.weighReading.create({ data: readingData });
+      const reading = await tx.weighReading.create({ data: readingData });
+      const advance = await this.sessions.promoteNextBatchItem(tx, current);
+      return { reading, ...advance };
     });
   }
 
   private toConfirmResult(
     session: Pick<WeighSession, 'packageUid' | 'weighingMethod' | 'flowType'>,
     reading: WeighReading,
+    advance?: BatchAdvance,
   ) {
     return {
       success: true,
@@ -330,6 +438,8 @@ export class WeighingsService {
       weighingMethod: session.weighingMethod,
       flowType: session.flowType,
       syncedToOdoo: reading.odooLogId != null,
+      nextSession: advance?.nextSession ?? null,
+      batchQueue: advance?.batchQueue ?? [],
     };
   }
 }

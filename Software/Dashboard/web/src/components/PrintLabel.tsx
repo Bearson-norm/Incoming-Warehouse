@@ -19,6 +19,7 @@ export interface PrintLabelData {
   unit: string;
   capturedAt: string;
   referenceOdoo: string;
+  poNumber?: string;
   batch: string;
   labelProductNumber: string;
   skuName: string;
@@ -62,7 +63,7 @@ interface PrintLabelProps {
 /* ============================================ */
 /* Generate CSS dari konfigurasi                */
 /* ============================================ */
-export function generateLabelCSS(cfg: PrintLabelConfig): string {
+export function generateLabelCSS(cfg: PrintLabelConfig, scope = ''): string {
   const compact =
     cfg.paperHeight > 0 && cfg.paperHeight <= 85;
   const sectionGap = compact ? 4 : 8;
@@ -70,67 +71,70 @@ export function generateLabelCSS(cfg: PrintLabelConfig): string {
   const productMargin = compact ? '0 0 4px 0' : '0 0 8px 0';
   const tableCellPad = compact ? '2px 4px' : '4px 6px';
   const qrRowMargin = compact ? 4 : 8;
+  const root = scope ? `${scope} ` : '';
 
   return `
-  .label-card {
+  ${root}.label-card {
     background-color: #FFFFFF;
     color: #000000;
     font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     padding: ${cfg.paperPaddingY}mm ${cfg.paperPaddingX}mm;
     width: ${cfg.paperWidth}mm;
-    ${cfg.paperHeight > 0 ? `height: ${cfg.paperHeight}mm;` : ''}
+    max-width: 100%;
+    ${cfg.paperHeight > 0 ? `min-height: ${cfg.paperHeight}mm;` : ''}
     box-sizing: border-box;
     border: 2px solid #000000;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
   }
 
-  .label-header {
+  ${root}.label-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 4mm;
     margin-bottom: ${sectionGap}px;
     border-bottom: 1px solid #000;
     padding-bottom: ${compact ? 4 : 6}px;
   }
 
-  .label-header-dates {
+  ${root}.label-header-dates {
     font-size: ${cfg.headerDatesFontSize}px;
     font-weight: 700;
     line-height: 1.6;
     flex: 1;
     min-width: 0;
+    color: #000000;
   }
 
-  .label-logo {
+  ${root}.label-logo {
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    line-height: 0;
   }
 
-  .label-logo-img {
+  ${root}.label-logo-img {
     display: block;
     height: auto;
     max-height: ${cfg.logoFontSize}px;
     max-width: 42mm;
     width: auto;
     object-fit: contain;
-    object-position: right top;
+    object-position: right center;
   }
 
-  .label-title {
+  ${root}.label-title {
     text-align: center;
     font-size: ${cfg.titleFontSize}px;
     font-weight: 800;
     font-family: 'Arial Black', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     letter-spacing: 0.04em;
     margin: ${titleMargin};
+    color: #000000;
   }
 
-  .label-product-number {
+  ${root}.label-product-number {
     text-align: center;
     font-size: ${cfg.productNumberFontSize}px;
     font-weight: 800;
@@ -140,41 +144,44 @@ export function generateLabelCSS(cfg: PrintLabelConfig): string {
     margin: ${productMargin};
     word-break: break-all;
     line-height: 1.3;
+    color: #000000;
   }
 
-  .label-table {
+  ${root}.label-table {
     width: 100%;
     border-collapse: collapse;
     font-size: ${cfg.tableValueFontSize}px;
     margin-bottom: ${sectionGap}px;
+    color: #000000;
   }
 
-  .label-table td {
+  ${root}.label-table td {
     border: 1.5px solid #000;
     padding: ${tableCellPad};
     vertical-align: top;
     line-height: 1.3;
+    color: #000000;
   }
 
-  .label-table .td-label {
+  ${root}.label-table .td-label {
     font-weight: 700;
     font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     width: 25%;
     font-size: ${cfg.tableLabelFontSize}px;
   }
 
-  .label-table .td-value {
+  ${root}.label-table .td-value {
     font-size: ${cfg.tableValueFontSize}px;
     font-weight: 600;
     word-break: break-word;
   }
 
-  .label-tare-netto {
+  ${root}.label-tare-netto {
     font-size: ${cfg.tareNettoFontSize}px !important;
     line-height: 1.3;
   }
 
-  .label-qr-row {
+  ${root}.label-qr-row {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
@@ -182,20 +189,20 @@ export function generateLabelCSS(cfg: PrintLabelConfig): string {
     padding: 0 4px;
   }
 
-  .label-qr-item {
+  ${root}.label-qr-item {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 3px;
   }
 
-  .label-qr-box {
+  ${root}.label-qr-box {
     background: #fff;
     padding: 3px;
     border: 1px solid #000;
   }
 
-  .label-qr-tag {
+  ${root}.label-qr-tag {
     display: inline-block;
     background-color: #FFFFFF;
     color: #000;
@@ -215,75 +222,85 @@ export function generateLabelCSS(cfg: PrintLabelConfig): string {
  * Membaca konfigurasi dari localStorage.
  * Komponen PrintLabel harus sudah di-render di DOM sebelum fungsi ini dipanggil.
  */
-export function printLabelInNewWindow(): boolean {
+export function buildPrintLabelDocumentHtml(): string | null {
   const printArea = document.getElementById('print-label-area');
-  if (!printArea) return false;
+  if (!printArea) return null;
 
   const labelCard = printArea.querySelector('.label-card');
-  if (!labelCard) return false;
+  if (!labelCard) return null;
 
   const cfg = loadPrintLabelConfig();
   const css = generateLabelCSS(cfg);
+  const pageSize = formatPrintPageSize(cfg);
+  const pageWidthMm = cfg.paperWidth;
+  const pageHeightMm = cfg.paperHeight > 0 ? cfg.paperHeight : cfg.paperWidth;
+  const printBase = (document.baseURI || window.location.href).replace(/"/g, '&quot;');
 
-  const pageWidth = cfg.paperLandscape
-    ? cfg.paperMediaHeight
-    : cfg.paperWidth;
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <base href="${printBase}" />
+    <title>Print Label FOOM</title>
+    <style>
+      @page { size: ${pageSize}; margin: 0; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        width: ${pageWidthMm}mm;
+        height: ${pageHeightMm}mm;
+      }
+      @media print {
+        html, body { margin: 0; padding: 0; }
+      }
+      @media screen {
+        body {
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+          padding: 10mm;
+          background: #f0f0f0;
+          width: auto;
+          height: auto;
+        }
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      ${css}
+      .label-card {
+        max-width: none;
+      }
+    </style>
+  </head>
+  <body>
+    ${labelCard.outerHTML}
+  </body>
+</html>`;
+}
+
+export function printLabelInNewWindow(): boolean {
+  const html = buildPrintLabelDocumentHtml();
+  if (!html) return false;
+
+  const cfg = loadPrintLabelConfig();
+  const pageWidth = cfg.paperLandscape ? cfg.paperMediaHeight : cfg.paperWidth;
   const pageHeight = cfg.paperLandscape
     ? cfg.paperMediaWidth
     : cfg.paperHeight > 0
       ? cfg.paperHeight
       : cfg.paperWidth * 1.4;
-  const pageSize = formatPrintPageSize(cfg);
 
-  const printWindow = window.open('', '_blank', `width=${Math.round(pageWidth * 3.78 + 100)},height=${Math.round(pageHeight * 3.78 + 100)}`);
+  const printWindow = window.open(
+    '',
+    '_blank',
+    `width=${Math.round(pageWidth * 3.78 + 100)},height=${Math.round(pageHeight * 3.78 + 100)}`,
+  );
   if (!printWindow) return false;
 
-  const printBase = document.baseURI || window.location.href;
-
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <base href="${printBase.replace(/"/g, '&quot;')}" />
-        <title>Print Label FOOM</title>
-        <style>
-          body {
-            margin: 0;
-            padding: 0;
-            background: #fff;
-          }
-          @page {
-            size: ${pageSize};
-            margin: 0;
-          }
-          @media print {
-            body {
-              margin: 0;
-              padding: 0;
-            }
-          }
-          @media screen {
-            body {
-              display: flex;
-              justify-content: center;
-              align-items: flex-start;
-              padding: 10mm;
-              background: #f0f0f0;
-            }
-          }
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            color-adjust: exact !important;
-          }
-          ${css}
-        </style>
-      </head>
-      <body>
-        ${labelCard.outerHTML}
-      </body>
-    </html>
-  `);
+  printWindow.document.write(html);
   printWindow.document.close();
   printWindow.focus();
 
@@ -379,7 +396,7 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ data, configOverride }) 
         <table className="label-table">
           <tbody>
             <tr>
-              <td className="td-label">Sku Name</td>
+              <td className="td-label">Nama RM</td>
               <td className="td-value">{skuDisplay}</td>
               <td className="td-label">Batch</td>
               <td className="td-value">{batchValue}</td>
@@ -468,10 +485,19 @@ export const LabelPreview: React.FC<PrintLabelProps> = ({ data, configOverride }
   const skuDisplay = skuName || packagingName || 'N/A';
   const skuQrValue = (skuCode && skuCode.trim() !== '') ? skuCode.trim() : skuDisplay;
   const batchValue = batch || 'N/A';
-  const labelCSS = generateLabelCSS(cfg);
+  const scope = '.print-label-preview';
+  const labelCSS = generateLabelCSS(cfg, scope);
 
   return (
-    <div style={{ width: `${cfg.paperWidth}mm` }}>
+    <div
+      className="print-label-preview"
+      style={{
+        width: `${cfg.paperWidth}mm`,
+        maxWidth: '100%',
+        color: '#000000',
+        background: '#ffffff',
+      }}
+    >
       <style>{labelCSS}</style>
       <div className="label-card">
         <div className="label-header">
@@ -492,7 +518,7 @@ export const LabelPreview: React.FC<PrintLabelProps> = ({ data, configOverride }
         <table className="label-table">
           <tbody>
             <tr>
-              <td className="td-label">Sku Name</td>
+              <td className="td-label">Nama RM</td>
               <td className="td-value">{skuDisplay}</td>
               <td className="td-label">Batch</td>
               <td className="td-value">{batchValue}</td>

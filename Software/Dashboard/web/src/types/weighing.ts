@@ -143,6 +143,13 @@ export interface CloudStatus {
   error?: string;
 }
 
+export interface BatchQueueItem {
+  id: number;
+  packageUid?: string | null;
+  batchSequence?: number | null;
+  queueStatus?: string | null;
+}
+
 export interface WeighSession {
   id: number;
   packageUid?: string | null;
@@ -155,6 +162,11 @@ export interface WeighSession {
   packagingId?: number | null;
   rmCodeId?: number | null;
   labelMetadata?: string | null;
+  batchGroupId?: string | null;
+  batchSequence?: number | null;
+  batchSize?: number | null;
+  queueStatus?: string | null;
+  batchQueue?: BatchQueueItem[];
   vendor?: Vendor | null;
   packaging?: Packaging | null;
   rmCode?: RmCode | null;
@@ -174,6 +186,8 @@ export interface ConfirmResult {
   weighingMethod?: WeighingMethod;
   flowType?: FlowType;
   syncedToOdoo?: boolean;
+  nextSession?: WeighSession | null;
+  batchQueue?: BatchQueueItem[];
 }
 
 export interface Reading {

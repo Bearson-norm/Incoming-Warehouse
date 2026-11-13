@@ -166,7 +166,7 @@ export default function Explore() {
                       <td>{reading.session.vendor.name}</td>
                       <td>{reading.session.packaging.name}</td>
                       <td>
-                        {(reading.weight * 1000).toFixed(2)} g
+                        {Number(reading.weight).toFixed(1)} g
                       </td>
                       <td>
                         <span className={`status ${reading.stable ? 'stable' : 'unstable'}`}>

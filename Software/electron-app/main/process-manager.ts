@@ -348,7 +348,12 @@ export class ProcessManager {
       // extraResources "to": "resources/api" → process.resourcesPath/resources/api
       // Works when app is copied (Downloads, USB, etc.)
       const apiPath = path.join(process.resourcesPath, 'resources', 'api');
-      if (fs.existsSync(path.join(apiPath, 'src', 'main.js')) || fs.existsSync(path.join(apiPath, 'dist', 'src', 'main.js'))) {
+      if (
+        fs.existsSync(path.join(apiPath, 'main.js')) ||
+        fs.existsSync(path.join(apiPath, 'src', 'main.js')) ||
+        fs.existsSync(path.join(apiPath, 'dist', 'main.js')) ||
+        fs.existsSync(path.join(apiPath, 'dist', 'src', 'main.js'))
+      ) {
         return apiPath;
       }
       // Fallback: app.getAppPath() for portable/alternative layouts

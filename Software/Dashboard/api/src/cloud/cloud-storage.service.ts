@@ -10,6 +10,12 @@ import { UpdateCloudScaleDto } from './dto/update-cloud-scale.dto';
 import { IngestCloudReadingDto } from './dto/ingest-cloud-reading.dto';
 import { QueryCloudReadingsDto } from './dto/query-cloud-readings.dto';
 import { IngestLpnTraceDto } from './dto/ingest-lpn-trace.dto';
+import {
+  groupReadingsByPo,
+  poNumberFromLabelMetadata,
+  PO_GROUP_FETCH_CAP,
+} from '../common/po-groups';
+import { labelMetadataToGrams } from '../common/weight-unit';
 
 /** PostgreSQL-only cloud tables; cast keeps SQLite-packaged API builds compiling. */
 type CloudPrisma = {
@@ -101,6 +107,8 @@ export class CloudStorageService {
       );
     }
 
+    const weights = normalizeCloudWeights(dto);
+
     try {
       return await this.cloudDb.cloudWeighReading.create({
         data: {
@@ -120,16 +128,16 @@ export class CloudStorageService {
           packagingSnapshot: dto.packagingSnapshot?.trim() || null,
           rmCodeCloudId: dto.rmCodeCloudId || null,
           rmCodeSnapshot: dto.rmCodeSnapshot?.trim() || null,
-          labelMetadata: dto.labelMetadata || null,
+          labelMetadata: weights.labelMetadata,
           odooLogId: dto.odooLogId ?? null,
           odooPackageId: dto.odooPackageId ?? null,
           flowType: dto.flowType,
           weighingMethod: dto.weighingMethod,
-          weight: dto.weight,
-          grossWeight: dto.grossWeight ?? null,
-          tareWeight: dto.tareWeight ?? null,
-          netWeight: dto.netWeight ?? null,
-          unit: dto.unit?.trim() || 'kg',
+          weight: weights.weight,
+          grossWeight: weights.grossWeight,
+          tareWeight: weights.tareWeight,
+          netWeight: weights.netWeight,
+          unit: 'g',
           weightStatus: dto.weightStatus ?? null,
           capturedAt: new Date(dto.capturedAt),
         },
@@ -150,11 +158,13 @@ export class CloudStorageService {
               eventId: dto.eventId?.trim() || undefined,
               odooLogId: dto.odooLogId ?? null,
               odooPackageId: dto.odooPackageId ?? null,
-              grossWeight: dto.grossWeight ?? null,
-              tareWeight: dto.tareWeight ?? null,
-              netWeight: dto.netWeight ?? null,
+              weight: weights.weight,
+              grossWeight: weights.grossWeight,
+              tareWeight: weights.tareWeight,
+              netWeight: weights.netWeight,
+              unit: 'g',
               weightStatus: dto.weightStatus ?? null,
-              labelMetadata: dto.labelMetadata || null,
+              labelMetadata: weights.labelMetadata,
             },
           });
         }
@@ -181,6 +191,9 @@ export class CloudStorageService {
     if (query.packageUid) {
       where.packageUid = query.packageUid.trim().toUpperCase();
     }
+    if (query.poNumber?.trim()) {
+      where.labelMetadata = { contains: query.poNumber.trim() };
+    }
     if (query.deviceId) {
       where.deviceId = query.deviceId;
     }
@@ -198,6 +211,10 @@ export class CloudStorageService {
       where.capturedAt = capturedAt;
     }
 
+    if (query.groupBy === 'po') {
+      return this.queryReadingsGrouped(where, query);
+    }
+
     const limit = Math.min(Math.max(query.limit ?? 100, 1), 500);
     const offset = Math.max(query.offset ?? 0, 0);
 
@@ -212,6 +229,55 @@ export class CloudStorageService {
       this.cloudDb.cloudWeighReading.count({ where }),
     ]);
 
+    return {
+      items: await this.decorateCloudReadings(items),
+      total,
+      limit,
+      offset,
+    };
+  }
+
+  private async queryReadingsGrouped(
+    where: Record<string, unknown>,
+    query: QueryCloudReadingsDto,
+  ) {
+    const limit = Math.min(Math.max(query.limit ?? 25, 1), 100);
+    const offset = Math.max(query.offset ?? 0, 0);
+    const [rows, matched] = await Promise.all([
+      this.cloudDb.cloudWeighReading.findMany({
+        where,
+        orderBy: { capturedAt: 'desc' },
+        take: PO_GROUP_FETCH_CAP,
+        include: { scale: true },
+      }),
+      this.cloudDb.cloudWeighReading.count({ where }),
+    ]);
+    const decorated = await this.decorateCloudReadings(rows);
+    const poTerm = query.poNumber?.trim().toLowerCase() ?? '';
+    const filtered = poTerm
+      ? decorated.filter((row) =>
+          poNumberFromLabelMetadata(row.labelMetadata)
+            .toLowerCase()
+            .includes(poTerm),
+        )
+      : decorated;
+    const allGroups = groupReadingsByPo(
+      filtered,
+      (row) => row.labelMetadata,
+    );
+    return {
+      groups: allGroups.slice(offset, offset + limit),
+      items: [],
+      total: allGroups.length,
+      limit,
+      offset,
+      capped: matched > PO_GROUP_FETCH_CAP,
+    };
+  }
+
+  private async decorateCloudReadings(
+    items: unknown[],
+  ): Promise<Array<Record<string, any> & { capturedAt: Date | string; labelMetadata?: string | null }>> {
     const vendorIds = items
       .map((item) => (item as Record<string, any>).vendorCloudId)
       .filter(Boolean);
@@ -245,21 +311,18 @@ export class CloudStorageService {
         (row) => [row.cloudId, row.name || row.code] as [string, string],
       ),
     );
-    return {
-      items: items.map((item) => {
-        const row = item as Record<string, any>;
-        return {
-          ...row,
-          currentVendorName: vendorNames.get(row.vendorCloudId) || null,
-          currentPackagingName:
-            packagingNames.get(row.packagingCloudId) || null,
-          currentRmName: rmNames.get(row.rmCodeCloudId) || null,
-        };
-      }),
-      total,
-      limit,
-      offset,
-    };
+    return items.map((item) => {
+      const row = item as Record<string, any>;
+      return {
+        ...row,
+        capturedAt: (row.capturedAt ?? new Date(0)) as Date | string,
+        labelMetadata: (row.labelMetadata ?? null) as string | null,
+        currentVendorName: vendorNames.get(row.vendorCloudId) || null,
+        currentPackagingName:
+          packagingNames.get(row.packagingCloudId) || null,
+        currentRmName: rmNames.get(row.rmCodeCloudId) || null,
+      };
+    });
   }
 
   async ingestTraceEvent(dto: IngestLpnTraceDto) {
@@ -349,4 +412,28 @@ export class CloudStorageService {
     }
     return scale;
   }
+}
+
+function normalizeCloudWeights(dto: IngestCloudReadingDto): {
+  weight: number;
+  grossWeight: number | null;
+  tareWeight: number | null;
+  netWeight: number | null;
+  labelMetadata: string | null;
+} {
+  const fromKg = (dto.unit?.trim().toLowerCase() || 'g') === 'kg';
+  const scale = (value: number | null | undefined) => {
+    if (value == null) return null;
+    return fromKg ? value * 1000 : value;
+  };
+  const metadata = fromKg
+    ? labelMetadataToGrams(dto.labelMetadata)
+    : dto.labelMetadata;
+  return {
+    weight: fromKg ? dto.weight * 1000 : dto.weight,
+    grossWeight: scale(dto.grossWeight),
+    tareWeight: scale(dto.tareWeight),
+    netWeight: scale(dto.netWeight),
+    labelMetadata: metadata || null,
+  };
 }
