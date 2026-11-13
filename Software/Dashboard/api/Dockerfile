@@ -1,4 +1,4 @@
-FROM node:22.23.4-bookworm-slim AS builder
+FROM node:22.23.5-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ RUN npx prisma generate \
   && npm prune --omit=dev \
   && npm cache clean --force
 
-FROM node:22.23.4-bookworm-slim
+FROM node:22.23.5-bookworm-slim
 
 WORKDIR /app
 
